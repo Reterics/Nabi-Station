@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect } from 'react';
 import { needsAttention } from '@nabi/protocol';
-import { Details, activityLabel } from './panel/Details';
+import { Details } from './panel/Details';
+import { agentMark, sessionLine } from './panel/sessionLine';
 import { useStation, type Connection } from './state/store';
 import { SceneLabels } from './city/LabelLayer';
 import { Icon } from './Icon';
@@ -32,6 +33,14 @@ export function App() {
     focus,
   } = useStation();
   const attention = world.agents.filter(needsAttention).length;
+  const sessions = world.agents.filter((agent) => agent.activity !== 'ended');
+  const projects = new Set(sessions.map((agent) => agent.repoId ?? agent.cwd))
+    .size;
+  const working = sessions.flatMap((agent) =>
+    (agent.helpers ?? []).filter((helper) => helper.state === 'active'),
+  ).length;
+  const hasSessions = (repoId: string) =>
+    sessions.some((agent) => agent.repoId === repoId);
   const live = world.mode === 'live';
   // No world from the daemon yet: show nothing rather than anything invented.
   const waiting = connection !== 'demo' && world.version === 0;
@@ -80,7 +89,7 @@ export function App() {
           href="#"
           onClick={(event) => {
             event.preventDefault();
-            setView('city');
+            setView('sessions');
           }}
           aria-label="Nabi Station home"
         >
@@ -93,11 +102,18 @@ export function App() {
         </a>
         <nav className="segmented" aria-label="Workspace view">
           <button
+            onClick={() => setView('sessions')}
+            aria-pressed={view === 'sessions'}
+          >
+            <Icon name="activity" size={15} />
+            Active sessions
+          </button>
+          <button
             onClick={() => setView('city')}
             aria-pressed={view === 'city'}
           >
             <Icon name="city" size={15} />
-            Workspace city
+            Workspace
           </button>
           <button
             onClick={() => setView('gallery')}
@@ -118,6 +134,37 @@ export function App() {
           <h2>{district.name}</h2>
           <p className="root-path">{district.rootPath}</p>
           <div className="sidebar-section-heading">
+            <span>Active sessions</span>
+            <span>{sessions.length.toString().padStart(2, '0')}</span>
+          </div>
+          <div className="agent-list">
+            {sessions.length === 0 && (
+              <p className="sidebar-empty">
+                {waiting ? 'Waiting for the daemon.' : 'No sessions running.'}
+              </p>
+            )}
+            {sessions.map((agent) => (
+              <button
+                className={`agent-nav ${selection?.id === agent.id ? 'active' : ''}`}
+                key={agent.id}
+                onClick={() => {
+                  select({ kind: 'agent', id: agent.id });
+                  setView('sessions');
+                }}
+              >
+                <span className={`avatar ${agent.kind}`}>
+                  {agentMark(agent.kind)}
+                </span>
+                <span>
+                  <strong>{agent.name}</strong>
+                  <small className={needsAttention(agent) ? 'amber-text' : ''}>
+                    {sessionLine(agent)}
+                  </small>
+                </span>
+              </button>
+            ))}
+          </div>
+          <div className="sidebar-section-heading">
             <span>Repositories</span>
             <span>{world.repos.length.toString().padStart(2, '0')}</span>
           </div>
@@ -128,42 +175,12 @@ export function App() {
                 className={`repo-button ${selection?.id === repo.id ? 'active' : ''}`}
                 onClick={() => {
                   select({ kind: 'repo', id: repo.id });
-                  setView('city');
+                  setView(hasSessions(repo.id) ? 'sessions' : 'city');
                 }}
               >
                 <span className={`repo-dot ${repo.building.archetype}`} />
                 <span>{repo.name}</span>
-                {world.agents.some((agent) => agent.repoId === repo.id) && (
-                  <i className="tiny-dot" />
-                )}
-              </button>
-            ))}
-          </div>
-          <div className="sidebar-section-heading">
-            <span>Agents</span>
-            <span>{world.agents.length.toString().padStart(2, '0')}</span>
-          </div>
-          <div className="agent-list">
-            {world.agents.map((agent) => (
-              <button
-                className="agent-nav"
-                key={agent.id}
-                onClick={() => {
-                  select({ kind: 'agent', id: agent.id });
-                  setView('city');
-                }}
-              >
-                <span className={`avatar ${agent.kind}`}>
-                  {agent.kind === 'claude-code'
-                    ? 'C'
-                    : agent.kind === 'codex'
-                      ? 'X'
-                      : 'G'}
-                </span>
-                <span>
-                  <strong>{agent.name}</strong>
-                  <small>{activityLabel(agent.activity)}</small>
-                </span>
+                {hasSessions(repo.id) && <i className="tiny-dot" />}
               </button>
             ))}
           </div>
@@ -180,12 +197,18 @@ export function App() {
           <div className="scene-heading">
             <div>
               <h1>
-                {view === 'city' ? 'Workspace overview' : 'Asset preview'}
+                {view === 'sessions'
+                  ? 'Active sessions'
+                  : view === 'city'
+                    ? 'Workspace overview'
+                    : 'Asset preview'}
               </h1>
               <p>
-                {view !== 'city'
-                  ? 'Models / animations / architecture'
-                  : `${world.repos.length} repositories / ${world.agents.length} agents`}
+                {view === 'sessions'
+                  ? `${sessions.length} ${sessions.length === 1 ? 'session' : 'sessions'} in ${projects} ${projects === 1 ? 'project' : 'projects'} / ${working} ${working === 1 ? 'helper' : 'helpers'} working`
+                  : view === 'city'
+                    ? `${world.repos.length} repositories / ${world.agents.length} agents`
+                    : 'Models / helpers / animations / architecture'}
               </p>
             </div>
             <span className="demo-badge">
@@ -199,9 +222,11 @@ export function App() {
           <div
             className="scene-container"
             aria-label={
-              view === 'city'
-                ? 'Interactive workspace city'
-                : 'Interactive asset gallery'
+              view === 'sessions'
+                ? 'Active sessions and their helpers'
+                : view === 'city'
+                  ? 'Interactive workspace city'
+                  : 'Interactive asset gallery'
             }
           >
             <Suspense
@@ -210,7 +235,7 @@ export function App() {
               <Scene />
             </Suspense>
             <SceneLabels />
-            {waiting && view === 'city' && (
+            {waiting && view !== 'gallery' && (
               <div className="not-connected" role="status">
                 <h2>
                   {connection === 'connecting'
@@ -229,11 +254,30 @@ export function App() {
                 </p>
               </div>
             )}
+            {!waiting && view === 'sessions' && sessions.length === 0 && (
+              <div className="not-connected" role="status">
+                <h2>No active sessions</h2>
+                <p>
+                  Claude Code, Codex and Cursor sessions appear here as soon as
+                  they start, with the tools they hand work to around them.
+                </p>
+                <button
+                  className="primary-button"
+                  onClick={() => setView('city')}
+                >
+                  <Icon name="city" size={14} />
+                  <span>Browse workspace</span>
+                </button>
+              </div>
+            )}
           </div>
           <div className="scene-bottom">
             <div className="legend">
               <span>
                 <i className="legend-dot blue" /> Working
+              </span>
+              <span>
+                <i className="legend-dot teal" /> Helper working
               </span>
               <span>
                 <i className="legend-dot amber" /> Attention

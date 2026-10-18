@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   CodexAdapter,
   codexActivity,
+  codexHelpers,
   latestVersioned,
   type CodexThread,
 } from './codex';
@@ -55,6 +56,42 @@ describe('Codex activity mapping', () => {
   });
 });
 
+describe('Codex helpers', () => {
+  const call = (
+    itemId: string,
+    server: string,
+    tool: string,
+    status: string,
+  ) => ({
+    itemId,
+    itemType: 'mcpToolCall',
+    server,
+    tool,
+    status,
+    createdAtMs: now,
+  });
+  it('marks the running call active and keeps the rest as recent', () => {
+    const helpers = codexHelpers(
+      [
+        call('a', 'codex_apps', 'github.fetch', 'completed'),
+        call('b', 'tiger', 'db_query', 'failed'),
+        call('c', 'blender', 'execute_blender_code', 'inProgress'),
+      ],
+      true,
+      'c',
+    );
+    expect(helpers.map((h) => [h.label, h.state])).toEqual([
+      ['Blender', 'active'],
+      ['GitHub', 'recent'],
+      ['Tiger', 'failed'],
+    ]);
+    expect(
+      codexHelpers([call('c', 'blender', 'x', 'inProgress')], false, 'c')[0]!
+        .state,
+    ).toBe('recent');
+  });
+});
+
 describe('CodexAdapter', () => {
   let home: string;
   afterEach(() => rm(home, { recursive: true, force: true }));
@@ -88,9 +125,28 @@ describe('CodexAdapter', () => {
     state.close();
     const history = new DatabaseSync(join(home, 'thread_history_1.sqlite'));
     history.exec(`CREATE TABLE thread_turns (thread_id TEXT, turn_id TEXT, rollout_ordinal INTEGER, status TEXT);
-      CREATE TABLE thread_items (thread_id TEXT, turn_id TEXT, rollout_ordinal INTEGER, item_type TEXT);
-      INSERT INTO thread_turns VALUES ('live', 'turn-1', 1, 'completed'), ('live', 'turn-2', 2, 'inProgress');
-      INSERT INTO thread_items VALUES ('live', 'turn-2', 3, 'reasoning'), ('live', 'turn-2', 4, 'fileChange');`);
+      CREATE TABLE thread_items (thread_id TEXT, turn_id TEXT, item_id TEXT, rollout_ordinal INTEGER,
+        created_at_ms INTEGER, item_json TEXT, item_type TEXT);
+      INSERT INTO thread_turns VALUES ('live', 'turn-1', 1, 'completed'), ('live', 'turn-2', 2, 'inProgress');`);
+    const item = history.prepare(
+      'INSERT INTO thread_items VALUES (?, ?, ?, ?, ?, ?, ?)',
+    );
+    item.run(
+      'live',
+      'turn-1',
+      'i1',
+      1,
+      now - 60_000,
+      JSON.stringify({
+        server: 'blender',
+        tool: 'execute_blender_code',
+        status: 'completed',
+        arguments: { code: 'secret' },
+      }),
+      'mcpToolCall',
+    );
+    item.run('live', 'turn-2', 'i2', 3, now - 2_000, '{}', 'reasoning');
+    item.run('live', 'turn-2', 'i3', 4, now - 1_000, '{}', 'fileChange');
     history.close();
 
     const agents = await new CodexAdapter(home).discover(now);
@@ -102,7 +158,16 @@ describe('CodexAdapter', () => {
         activity: 'editing',
         confidence: 'high',
         cwd: 'C:/work/demo',
+        helpers: [
+          expect.objectContaining({
+            id: 'mcp:blender',
+            label: 'Blender',
+            category: '3d',
+            state: 'recent',
+          }),
+        ],
       }),
     ]);
+    expect(JSON.stringify(agents)).not.toContain('secret');
   });
 });

@@ -2,16 +2,27 @@ import { Component, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { PCFShadowMap } from 'three';
 import { SceneLabel } from './SceneLabel';
+import { seedFromString } from '@nabi/building-gen';
 import {
+  archetypes,
+  buildingModules,
+  characterForAgent,
   characterKinds,
   clipForActivity,
+  helperCategories,
+  helperCategoryNames,
+  maturities,
+  maturityNames,
   needsAttention,
 } from '@nabi/protocol';
+import { agentKindName } from '../panel/sessionLine';
 import { selectedRepoId, useStation } from '../state/store';
 import { Building } from './Building';
 import { Camera } from './Camera';
 import { Character } from './Character';
+import { HelperFigure } from './Helper';
 import { cityLayout, type DistrictArea } from './layout';
+import { Sessions } from './Sessions';
 
 class SceneBoundary extends Component<
   { children: ReactNode },
@@ -180,7 +191,7 @@ function City({ paused }: { paused: boolean }) {
           >
             <group scale={1.05}>
               <Character
-                kind={agent.kind}
+                kind={characterForAgent(agent.kind)}
                 clip={clipForActivity[agent.activity]}
                 paused={paused}
               />
@@ -210,49 +221,87 @@ function City({ paused }: { paused: boolean }) {
 }
 
 function Gallery({ paused }: { paused: boolean }) {
-  const { world, gallery, clip, tier } = useStation();
+  const { gallery, clip, tier } = useStation();
   return (
     <>
       <mesh receiveShadow position={[0, -0.2, 0]}>
         <boxGeometry args={[17, 0.4, 12]} />
         <meshStandardMaterial color="#687480" />
       </mesh>
-      {gallery === 'characters'
-        ? characterKinds.map((kind, index) => (
-            <group key={kind} position={[(index - 1) * 4, 0.05, 0]}>
-              <mesh receiveShadow position={[0, 0.08, 0]}>
-                <cylinderGeometry args={[1.35, 1.45, 0.16, 48]} />
-                <meshStandardMaterial color="#a6b1c0" />
-              </mesh>
-              <group position={[0, 0.17, 0]} scale={2.4}>
-                <Character kind={kind} clip={clip} paused={paused} />
+      {gallery === 'helpers'
+        ? helperCategories.map((category, index) => (
+            <group
+              key={category}
+              position={[
+                ((index % 5) - 2) * 3.1,
+                0.05,
+                (Math.floor(index / 5) - 1) * 3.4,
+              ]}
+            >
+              <group scale={2}>
+                <HelperFigure
+                  category={category}
+                  state="active"
+                  paused={paused}
+                />
               </group>
-              <SceneLabel position={[0, 0.2, 1.85]} center>
+              <SceneLabel position={[0, 0.2, 1.05]} center>
                 <span className="gallery-label">
-                  {kind === 'claude-code'
-                    ? 'Claude Code'
-                    : kind === 'codex'
-                      ? 'Codex'
-                      : 'Generic'}
-                  <small>{clip}</small>
+                  {helperCategoryNames[category]}
+                  <small>{category}</small>
                 </span>
               </SceneLabel>
             </group>
           ))
-        : world.repos.map((repo, index) => (
-            <group
-              key={repo.id}
-              position={[((index % 3) - 1) * 4.5, 0.05, index < 3 ? -2.8 : 2.8]}
-            >
-              <Building spec={{ ...repo.building, tier }} active />
-              <SceneLabel position={[0, 0.1, 1.8]} center>
-                <span className="gallery-label">
-                  {repo.building.archetype}
-                  <small>Tier {tier}</small>
-                </span>
-              </SceneLabel>
-            </group>
-          ))}
+        : gallery === 'characters'
+          ? characterKinds.map((kind, index) => (
+              <group key={kind} position={[(index - 1) * 4, 0.05, 0]}>
+                <mesh receiveShadow position={[0, 0.08, 0]}>
+                  <cylinderGeometry args={[1.35, 1.45, 0.16, 48]} />
+                  <meshStandardMaterial color="#a6b1c0" />
+                </mesh>
+                <group position={[0, 0.17, 0]} scale={2.4}>
+                  <Character kind={kind} clip={clip} paused={paused} />
+                </group>
+                <SceneLabel position={[0, 0.2, 1.85]} center>
+                  <span className="gallery-label">
+                    {agentKindName(kind)}
+                    <small>{clip}</small>
+                  </span>
+                </SceneLabel>
+              </group>
+            ))
+          : // A fixed showcase, one per archetype: live workspaces can have dozens of
+            // repositories. The slider sets tier and maturity together.
+            archetypes.map((archetype, index) => (
+              <group
+                key={archetype}
+                position={[
+                  ((index % 3) - 1) * 4.5,
+                  0.05,
+                  index < 3 ? -2.8 : 2.8,
+                ]}
+              >
+                <Building
+                  spec={{
+                    archetype,
+                    tier,
+                    maturity: maturities[tier],
+                    activity: 'active',
+                    seed: seedFromString(archetype),
+                    footprint: 1 + (index % 2),
+                    modules: [...buildingModules],
+                  }}
+                  active
+                />
+                <SceneLabel position={[0, 0.1, 1.8]} center>
+                  <span className="gallery-label">
+                    {archetype}
+                    <small>{maturityNames[maturities[tier]!]}</small>
+                  </span>
+                </SceneLabel>
+              </group>
+            ))}
     </>
   );
 }
@@ -288,7 +337,9 @@ export function Scene() {
           shadow-normalBias={0.04}
         />
         <Camera />
-        {view === 'city' ? (
+        {view === 'sessions' ? (
+          <Sessions paused={paused || reducedMotion || !visible} />
+        ) : view === 'city' ? (
           <City paused={paused || reducedMotion || !visible} />
         ) : (
           <Gallery paused={paused || reducedMotion || !visible} />

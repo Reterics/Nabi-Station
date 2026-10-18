@@ -37,6 +37,31 @@ describe('building generation', () => {
         expect(parts.some((part) => part.id === 'body')).toBe(tier > 0);
       }
   });
+  it('shows maturity as construction state and activity as lit windows', () => {
+    const ids = (overrides: Partial<BuildingSpec>) =>
+      generateBuilding({ ...spec, ...overrides }).map((part) => part.id);
+    const prototype = ids({ tier: 1, maturity: 'prototype' });
+    expect(prototype).toContain('crane-mast');
+    expect(prototype).toContain('scaffold-pole--1-1');
+    expect(prototype).not.toContain('roof');
+    const developing = ids({ tier: 2, maturity: 'developing' });
+    expect(developing).toContain('scaffold-pole-1-1');
+    expect(developing).not.toContain('scaffold-pole--1-1');
+    expect(developing).not.toContain('crane-mast');
+    const production = ids({ tier: 4, maturity: 'production' });
+    expect(production).toContain('crown');
+    expect(production.some((id) => id.startsWith('scaffold'))).toBe(false);
+
+    const windows = (activity: BuildingSpec['activity']) =>
+      generateBuilding({ ...spec, activity }).filter((part) =>
+        part.id.startsWith('window'),
+      );
+    expect(windows('active').every((part) => part.emissive)).toBe(true);
+    expect(windows('dormant').some((part) => part.emissive)).toBe(false);
+    const quiet = windows('quiet').filter((part) => part.emissive).length;
+    expect(quiet).toBeGreaterThan(0);
+    expect(quiet).toBeLessThan(windows('quiet').length);
+  });
   it('adds and removes capability modules independently', () => {
     const withoutModules = generateBuilding({ ...spec, modules: [] }).map(
       (part) => part.id,

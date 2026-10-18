@@ -1,6 +1,7 @@
 import {
   animationClips,
   characterKinds,
+  helperCategoryNames,
   needsAttention,
   type AgentNpc,
   type AnimationClip,
@@ -8,6 +9,13 @@ import {
 import { requestAgentFocus } from '../live/connection';
 import { selectedRepoId, useStation } from '../state/store';
 import { Icon } from '../Icon';
+import { Assessment } from './Assessment';
+import {
+  activityLabel,
+  agentKindName,
+  agentMark,
+  sessionLine,
+} from './sessionLine';
 
 const tierNames = [
   'Empty plot',
@@ -16,8 +24,7 @@ const tierNames = [
   'Established',
   'Landmark',
 ];
-export const activityLabel = (activity: string) =>
-  activity.replaceAll('-', ' ');
+export { activityLabel } from './sessionLine';
 
 /** Brings the session's terminal (or editor) window forward so the user can answer. */
 function SessionFocus({ agent }: { agent: AgentNpc }) {
@@ -41,6 +48,50 @@ function SessionFocus({ agent }: { agent: AgentNpc }) {
         <p className={`focus-status ${status.state}`} role="status">
           {status.message}
         </p>
+      )}
+    </div>
+  );
+}
+
+const helperStateText = {
+  active: 'working now',
+  waiting: 'awaiting approval',
+  failed: 'last call failed',
+  recent: 'used recently',
+} as const;
+
+/** The tools this session has handed work to, as observed in its own log. */
+function Helpers({ agent }: { agent: AgentNpc }) {
+  const helpers = agent.helpers ?? [];
+  return (
+    <div className="detail-section">
+      <h3>
+        Helpers <span className="subtle">{helpers.length}</span>
+      </h3>
+      {helpers.length === 0 ? (
+        <p className="muted">
+          No MCP servers, web requests or subagents in the last 15 minutes.
+        </p>
+      ) : (
+        helpers.map((helper) => (
+          <div className={`helper-row ${helper.state}`} key={helper.id}>
+            <span className={`helper-swatch ${helper.category}`} />
+            <div>
+              <strong>{helper.label}</strong>
+              <small>
+                {helperCategoryNames[helper.category]} ·{' '}
+                {helperStateText[helper.state]}
+                {helper.tool && (
+                  <>
+                    {' '}
+                    · <code>{helper.tool}</code>
+                  </>
+                )}
+              </small>
+            </div>
+            <span className="subtle">×{helper.calls}</span>
+          </div>
+        ))
       )}
     </div>
   );
@@ -125,13 +176,25 @@ export function Details() {
             Characters
           </button>
           <button
+            aria-pressed={gallery === 'helpers'}
+            onClick={() => setGallery('helpers')}
+          >
+            Helpers
+          </button>
+          <button
             aria-pressed={gallery === 'buildings'}
             onClick={() => setGallery('buildings')}
           >
             Buildings
           </button>
         </div>
-        {gallery === 'characters' ? (
+        {gallery === 'helpers' ? (
+          <p className="note">
+            One figure per helper category, shown working. In a session, MCP
+            servers, web requests and subagents stand around the agent that
+            called them and light up while it waits on them.
+          </p>
+        ) : gallery === 'characters' ? (
           <>
             <label className="field-label" htmlFor="animation">
               Animation clip
@@ -152,15 +215,9 @@ export function Details() {
               </h3>
               {characterKinds.map((kind) => (
                 <div className="asset-row" key={kind}>
-                  <span className={`avatar ${kind}`}>
-                    {kind === 'claude-code'
-                      ? 'C'
-                      : kind === 'codex'
-                        ? 'X'
-                        : 'G'}
-                  </span>
+                  <span className={`avatar ${kind}`}>{agentMark(kind)}</span>
                   <div>
-                    <strong>{kind}</strong>
+                    <strong>{agentKindName(kind)}</strong>
                     <small>Skinned GLB · 10 clips</small>
                   </div>
                 </div>
@@ -226,14 +283,13 @@ export function Details() {
           </span>
           <h2>{agent?.name ?? repo.name}</h2>
           <p className="muted">
-            {agent
-              ? `${activityLabel(agent.activity)} at ${repo.name}`
-              : repo.description}
+            {agent ? `${sessionLine(agent)} · ${repo.name}` : repo.description}
           </p>
           <button className="primary-button" onClick={focus}>
             <Icon name="focus" size={14} />
-            <span>Focus in city</span> <kbd>F</kbd>
+            <span>Focus</span> <kbd>F</kbd>
           </button>
+          {agent && <Helpers agent={agent} />}
           <div className="detail-section">
             <h3>Repository</h3>
             <div className="key-value">
@@ -256,30 +312,33 @@ export function Details() {
             </div>
             <code className="repo-path">{repo.path}</code>
           </div>
-          <div className="detail-section">
-            <h3>
-              {tierNames[repo.building.tier]}{' '}
-              <span className="subtle">Tier {repo.building.tier}/4</span>
-            </h3>
-            <div
-              className="tier-meter"
-              aria-label={`Tier ${repo.building.tier} of 4`}
-            >
-              {[1, 2, 3, 4].map((tier) => (
-                <i
-                  key={tier}
-                  className={tier <= repo.building.tier ? 'filled' : ''}
-                />
-              ))}
+          {/* Without a daemon analysis (demo data) only the fixture's tier is known. */}
+          {!repo.analysis && (
+            <div className="detail-section">
+              <h3>
+                {tierNames[repo.building.tier]}{' '}
+                <span className="subtle">Tier {repo.building.tier}/4</span>
+              </h3>
+              <div
+                className="tier-meter"
+                aria-label={`Tier ${repo.building.tier} of 4`}
+              >
+                {[1, 2, 3, 4].map((tier) => (
+                  <i
+                    key={tier}
+                    className={tier <= repo.building.tier ? 'filled' : ''}
+                  />
+                ))}
+              </div>
+              <div className="tags">
+                {repo.building.modules.map((module) => (
+                  <span key={module} className="tag">
+                    ✓ {module}
+                  </span>
+                ))}
+              </div>
             </div>
-            <div className="tags">
-              {repo.building.modules.map((module) => (
-                <span key={module} className="tag">
-                  ✓ {module}
-                </span>
-              ))}
-            </div>
-          </div>
+          )}
           <div className="detail-section">
             <h3>
               Agents <span className="subtle">{agents.length}</span>
@@ -294,11 +353,7 @@ export function Details() {
                   onClick={() => select({ kind: 'agent', id: item.id })}
                 >
                   <span className={`avatar ${item.kind}`}>
-                    {item.kind === 'claude-code'
-                      ? 'C'
-                      : item.kind === 'codex'
-                        ? 'X'
-                        : 'G'}
+                    {agentMark(item.kind)}
                   </span>
                   <span>
                     <strong>{item.name}</strong>
@@ -311,12 +366,16 @@ export function Details() {
             )}
           </div>
           {agent && <Observation agent={agent} demo={world.mode === 'demo'} />}
+          {repo.analysis && (
+            <Assessment repo={repo} live={world.mode === 'live'} />
+          )}
         </>
       ) : agent ? (
         <>
           <span className="tag">Outside the scanned repositories</span>
           <h2>{agent.name}</h2>
-          <p className="muted">{activityLabel(agent.activity)}</p>
+          <p className="muted">{sessionLine(agent)}</p>
+          <Helpers agent={agent} />
           <Observation agent={agent} demo={world.mode === 'demo'} />
         </>
       ) : (

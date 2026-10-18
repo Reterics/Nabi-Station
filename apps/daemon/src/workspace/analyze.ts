@@ -1,5 +1,6 @@
-import type { BuildingSpec } from '@nabi/protocol';
-import { git } from './git';
+import type { BuildingSpec, RepoAnalysis } from '@nabi/protocol';
+import { evaluate, tierForMaturity } from './evaluate';
+import { inspectRepo } from './inspect';
 
 export interface RepoSignals {
   language: string;
@@ -13,9 +14,13 @@ export interface RepoSignals {
   ci: boolean;
   container: boolean;
   deploy: boolean;
+  /** Deterministic checks and verdict; absent only in hand-built test signals. */
+  analysis?: RepoAnalysis;
+  /** README/architecture excerpts for the local model; never sent to the page. */
+  excerpts?: Record<string, string>;
 }
 
-const LANGUAGES: Record<string, string> = {
+export const LANGUAGES: Record<string, string> = {
   ts: 'TypeScript',
   tsx: 'TypeScript',
   mts: 'TypeScript',
@@ -113,6 +118,58 @@ const ARCHETYPES: Record<string, BuildingSpec['archetype']> = {
   Markdown: 'library',
 };
 
+/**
+ * Building style from what the repository is, so a workspace of TypeScript projects
+ * still reads as a varied city: 3D work → studio, UI apps → pavilion, services →
+ * office, ML/data → laboratory, then the language fallback above.
+ */
+export function archetypeFor(
+  language: string,
+  analysis: RepoAnalysis,
+): BuildingSpec['archetype'] {
+  const uses = (...names: string[]) =>
+    names.some((name) => analysis.frameworks.includes(name));
+  if (uses('Three.js', 'Bevy')) return 'studio';
+  if (uses('PyTorch', 'TensorFlow', 'pandas', 'NumPy')) return 'laboratory';
+  if (
+    uses(
+      'Next.js',
+      'React',
+      'Vue',
+      'Svelte',
+      'Angular',
+      'Solid',
+      'Astro',
+      'React Native',
+      'Electron',
+      'Tauri',
+    )
+  )
+    return 'pavilion';
+  if (
+    uses(
+      'Express',
+      'Fastify',
+      'NestJS',
+      'Hono',
+      'FastAPI',
+      'Django',
+      'Flask',
+      'Axum',
+      'Actix',
+      'Gin',
+      'Echo',
+      'Laravel',
+      'Symfony',
+      'Rails',
+    )
+  )
+    return 'office';
+  const code = analysis.languages.find((entry) => entry.name !== 'Markdown');
+  if (!code) return 'library';
+  return ARCHETYPES[language] ?? 'office';
+}
+
 /** Capabilities that raise a repository's tier, in the order the panel suggests them. */
 export const TIER_CAPABILITIES = [
   'readme',
@@ -126,13 +183,40 @@ export const TIER_CAPABILITIES = [
 ] as const;
 
 /**
- * Pure and deterministic (plan §12). Tier 0 is an empty plot (≤ 1 commit); otherwise
- * each capability is a point: 0–1 → 1, 2–3 → 2, 4–5 → 3, 6+ → 4.
+ * Pure and deterministic. With an analysis, the tier is its maturity (empty plot →
+ * production) and each passed check adds an annex. Without one (plan §12 fallback),
+ * tier 0 is an empty plot (≤ 1 commit) and each capability is a point:
+ * 0–1 → 1, 2–3 → 2, 4–5 → 3, 6+ → 4.
  */
 export function buildingFromSignals(
   signals: RepoSignals,
   seed: number,
 ): BuildingSpec {
+  const { analysis } = signals;
+  if (analysis) {
+    const passed = (id: string) =>
+      analysis.checks.some(
+        (check) => check.id === id && check.status === 'pass',
+      );
+    const modules: BuildingSpec['modules'] = [];
+    if (passed('tests')) modules.push('tests');
+    if (passed('e2e')) modules.push('e2e');
+    if (passed('ci')) modules.push('ci');
+    if (passed('lint')) modules.push('lint');
+    if (passed('readme') || passed('architecture-docs')) modules.push('docs');
+    if (passed('container')) modules.push('container');
+    if (passed('deploy')) modules.push('deploy');
+    if (passed('releases')) modules.push('release');
+    return {
+      archetype: archetypeFor(signals.language, analysis),
+      tier: tierForMaturity[analysis.maturity],
+      seed,
+      modules,
+      footprint: analysis.sizeBand <= 2 ? 1 : analysis.sizeBand <= 3 ? 2 : 3,
+      maturity: analysis.maturity,
+      activity: analysis.activity,
+    };
+  }
   const points = TIER_CAPABILITIES.filter(
     (capability) => signals[capability],
   ).length;
@@ -153,18 +237,25 @@ export function buildingFromSignals(
   };
 }
 
-const MAX_FILES = 50_000;
-
-export async function analyzeRepo(path: string): Promise<RepoSignals> {
-  const [files, commits] = await Promise.all([
-    git(path, ['ls-files', '-z']).then(
-      (output) => output.split('\0').filter(Boolean).slice(0, MAX_FILES),
-      () => [],
-    ),
-    git(path, ['rev-list', '--count', 'HEAD']).then(
-      (output) => Number(output.trim()) || 0,
-      () => 0, // No commits yet.
-    ),
-  ]);
-  return signalsFromFiles(files, commits);
+export async function analyzeRepo(
+  path: string,
+  now = Date.now(),
+): Promise<RepoSignals> {
+  const facts = await inspectRepo(path, now);
+  // The only file text that may reach the local model: README and architecture notes.
+  const excerpts = Object.fromEntries(
+    Object.entries(facts.texts)
+      .filter(([file]) =>
+        /^(readme|architecture)(\.[a-z]+)?$|^docs?\/(readme|index|architecture|overview)(\.[a-z]+)?$/i.test(
+          file,
+        ),
+      )
+      .slice(0, 3)
+      .map(([file, text]) => [file, text.slice(0, 2500)]),
+  );
+  return {
+    ...signalsFromFiles(facts.files, facts.commits.total),
+    analysis: evaluate(facts, now),
+    excerpts,
+  };
 }

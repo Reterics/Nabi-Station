@@ -1,4 +1,5 @@
 import {
+  recommendationsSchema,
   worldSchema,
   type ClientMessage,
   type ServerMessage,
@@ -89,6 +90,21 @@ export function requestAgentFocus(agentId: string) {
   });
 }
 
+/** Asks the daemon for the local model's recommendations for a repository. */
+export function requestRecommendations(repoId: string) {
+  const { setRecommendations } = useStation.getState();
+  if (socket?.readyState !== WebSocket.OPEN) {
+    setRecommendations(repoId, {
+      state: 'unavailable',
+      message: 'The daemon is not connected.',
+    });
+    return;
+  }
+  const message: ClientMessage = { type: 'recommend-repo', repoId };
+  socket.send(JSON.stringify(message));
+  setRecommendations(repoId, { state: 'pending' });
+}
+
 /** Connects to the local daemon. Without one the city stays empty (never demo data). */
 export function startLiveConnection() {
   if (started || demoRequested()) return;
@@ -119,6 +135,24 @@ export function startLiveConnection() {
           state: message.ok ? 'ok' : 'error',
           message: message.message,
         });
+        return;
+      }
+      if (message.type === 'recommendations') {
+        const { type: _, repoId, ...result } = message;
+        if (result.state !== 'ready') {
+          useStation.getState().setRecommendations(repoId, result);
+          return;
+        }
+        // Model output is untrusted text: keep it only if it has the expected shape.
+        const checked = recommendationsSchema.safeParse(result.recommendations);
+        useStation
+          .getState()
+          .setRecommendations(
+            repoId,
+            checked.success
+              ? { ...result, recommendations: checked.data }
+              : { state: 'unavailable', message: 'Malformed recommendations' },
+          );
         return;
       }
       if (message.type !== 'world') return;

@@ -17,15 +17,34 @@ test('city, selections, keyboard attention, and every asset work without remote 
       externalRequests.push(request.url());
   });
   await page.goto('/?demo');
+  // Home is the active-sessions view: only projects with sessions, each with its helpers.
   await expect(
-    page.getByRole('heading', { name: 'Workspace overview' }),
+    page.getByRole('heading', { name: 'Active sessions' }),
   ).toBeVisible();
-  await expect(page.locator('[data-model-ready]')).toHaveCount(3, {
+  // Five sessions plus one subagent helper figure.
+  await expect(page.locator('[data-model-ready]')).toHaveCount(6, {
     timeout: 30_000,
   });
   await expect(page.locator('canvas')).toBeVisible();
+  await expect(page.locator('.site-label')).toHaveCount(4);
+  await expect(page.locator('.session-bubble')).toHaveCount(5);
+  await expect(page.locator('.helper-chip')).toHaveCount(9);
+  await expect(
+    page.locator('.helper-chip.active', { hasText: 'Blender' }),
+  ).toBeVisible();
+  await expect(
+    page.locator('.session-bubble', {
+      hasText: 'Waiting on Blender · execute_blender_code',
+    }),
+  ).toBeVisible();
+  await page.screenshot({
+    path: testInfo.outputPath('sessions.png'),
+    fullPage: true,
+  });
   await page.getByRole('checkbox', { name: 'Reduced motion' }).check();
+  await page.getByRole('button', { name: 'Workspace', exact: true }).click();
   await expect(page.locator('.plot-label')).toHaveCount(6);
+  await expect(page.locator('[data-model-ready]')).toHaveCount(5);
   await page.screenshot({
     path: testInfo.outputPath('city.png'),
     fullPage: true,
@@ -38,13 +57,14 @@ test('city, selections, keyboard attention, and every asset work without remote 
   await expect(
     page.getByRole('heading', { name: 'field-notes', exact: true }),
   ).toBeVisible();
-  await page.getByRole('button', { name: 'Focus in city' }).click();
+  await page.getByRole('button', { name: /^Focus\b/ }).click();
   await page.locator('#main').focus();
   await page.keyboard.press('n');
   await expect(
     page.getByRole('heading', { name: 'Claude Code', exact: true }),
   ).toBeVisible();
   await expect(page.getByText('Reported state', { exact: true })).toBeVisible();
+  await expect(page.locator('.helper-row')).toHaveCount(2);
   await page
     .getByRole('button', { name: 'Asset gallery', exact: true })
     .click();
@@ -53,6 +73,13 @@ test('city, selections, keyboard attention, and every asset work without remote 
   await expect(page.locator('[data-animation="walk"]')).toHaveCount(3);
   await page.screenshot({
     path: testInfo.outputPath('characters.png'),
+    fullPage: true,
+  });
+  await page.getByRole('button', { name: 'Helpers', exact: true }).click();
+  await expect(page.locator('.gallery-label')).toHaveCount(13);
+  await expect(page.locator('[data-model-ready]')).toHaveCount(1);
+  await page.screenshot({
+    path: testInfo.outputPath('helpers.png'),
     fullPage: true,
   });
   await page.getByRole('button', { name: 'Buildings', exact: true }).click();
@@ -66,12 +93,15 @@ test('city, selections, keyboard attention, and every asset work without remote 
   // Regression: repeated gallery transitions must clean up every projected DOM label.
   await page.getByRole('button', { name: 'Characters', exact: true }).click();
   await expect(page.locator('[data-model-ready]')).toHaveCount(3);
-  await page
-    .getByRole('button', { name: 'Workspace city', exact: true })
-    .click();
+  await page.getByRole('button', { name: 'Workspace', exact: true }).click();
   await expect(page.locator('.plot-label')).toHaveCount(6);
   await expect(page.locator('.gallery-label')).toHaveCount(0);
-  await expect(page.locator('[data-model-ready]')).toHaveCount(3);
+  await expect(page.locator('[data-model-ready]')).toHaveCount(5);
+  await page
+    .getByRole('button', { name: 'Active sessions', exact: true })
+    .click();
+  await expect(page.locator('.plot-label')).toHaveCount(0);
+  await expect(page.locator('.helper-chip')).toHaveCount(9);
   expect(errors).toEqual([]);
   expect(externalRequests).toEqual([]);
 });

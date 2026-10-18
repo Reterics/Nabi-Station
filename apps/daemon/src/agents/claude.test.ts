@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   ClaudeCodeAdapter,
   claudeActivity,
+  claudeHelpers,
   parseSessionFile,
   parseTranscriptTail,
   type ClaudeSession,
@@ -55,7 +56,7 @@ describe('Claude transcript tail', () => {
       toolUse('b', 'Edit', { file_path: 'C:/y.ts' }),
     ].join('\n');
     const tail = parseTranscriptTail(text);
-    expect(tail.pendingTool).toEqual({
+    expect(tail.pendingTool).toMatchObject({
       id: 'b',
       name: 'Edit',
       path: 'C:/y.ts',
@@ -77,7 +78,7 @@ describe('Claude activity mapping', () => {
     expect(activity('Grep')).toBe('reading');
     expect(activity('Write')).toBe('editing');
     expect(activity('PowerShell')).toBe('running-tool');
-    expect(activity('Task')).toBe('working');
+    expect(activity('Task')).toBe('delegating');
     expect(claudeActivity(session, {}, now)).toMatchObject({
       activity: 'working',
       confidence: 'high',
@@ -100,6 +101,70 @@ describe('Claude activity mapping', () => {
     expect(
       claudeActivity(idle, { lastTimestamp: now - 3_600_000 }, now).activity,
     ).toBe('idle');
+  });
+});
+
+describe('Claude helpers', () => {
+  const at = (id: string, name: string, minutesAgo: number, input = {}) =>
+    line({
+      type: 'assistant',
+      timestamp: new Date(now - minutesAgo * 60_000).toISOString(),
+      message: { content: [{ type: 'tool_use', id, name, input }] },
+    });
+  const failed = (id: string) =>
+    line({
+      type: 'user',
+      message: {
+        content: [{ type: 'tool_result', tool_use_id: id, is_error: true }],
+      },
+    });
+  const prompt = line({ type: 'user', message: { content: 'secret prompt' } });
+
+  it('turns MCP servers, web access and subagents into helpers', () => {
+    const tail = parseTranscriptTail(
+      [
+        at('old', 'mcp__claude_ai_Higgsfield__generate_image', 40),
+        toolResult('old'),
+        at('h', 'mcp__claude_ai_Higgsfield__generate_image', 5),
+        toolResult('h'),
+        at('t', 'mcp__tiger__db_query', 4),
+        failed('t'),
+        prompt,
+        at('r', 'Read', 3, { file_path: 'C:/a.ts' }),
+        toolResult('r'),
+        at('b', 'mcp__blender__execute_blender_code', 1, { code: 'secret' }),
+        at('e', 'Agent', 1, { subagent_type: 'Explore', prompt: 'secret' }),
+      ].join('\n'),
+    );
+    const helpers = claudeHelpers(tail, true, now);
+    expect(helpers.map((h) => [h.label, h.category, h.state])).toEqual([
+      ['Blender', '3d', 'active'],
+      ['Explore subagent', 'subagent', 'active'],
+      ['Tiger', 'database', 'failed'],
+      ['Higgsfield', 'media', 'recent'],
+    ]);
+    expect(helpers[3]).toMatchObject({ calls: 1, tool: 'generate_image' });
+    expect(JSON.stringify(helpers)).not.toContain('secret');
+    expect(claudeActivity(session, tail, now)).toMatchObject({
+      activity: 'delegating',
+      detail: 'Waiting on Blender, Explore subagent',
+    });
+  });
+
+  it('shows a call awaiting permission as waiting, and own work as the activity', () => {
+    const tail = parseTranscriptTail(at('b', 'mcp__blender__x', 1));
+    expect(claudeHelpers(tail, false, now)[0]!.state).toBe('waiting');
+    const mixed = parseTranscriptTail(
+      [at('b', 'mcp__blender__x', 1), at('s', 'Bash', 1)].join('\n'),
+    );
+    expect(claudeActivity(session, mixed, now).activity).toBe('running-tool');
+  });
+
+  it('forgets unanswered calls from before the latest prompt', () => {
+    const tail = parseTranscriptTail(
+      [at('b', 'mcp__blender__x', 2), prompt].join('\n'),
+    );
+    expect(claudeHelpers(tail, true, now)[0]!.state).toBe('recent');
   });
 });
 

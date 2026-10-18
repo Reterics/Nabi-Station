@@ -1,14 +1,19 @@
 import { ClaudeCodeAdapter } from './claude';
 import { CodexAdapter } from './codex';
+import { CursorAdapter } from './cursor';
 import type { AgentAdapter, AgentObservation } from './types';
 
 export type { AgentObservation } from './types';
 
-/** `NABI_ADAPTERS=none` or a comma list (`claude-code,codex`) limits discovery; tests use it. */
+/** `NABI_ADAPTERS=none` or a comma list (`claude-code,codex,cursor`) limits discovery; tests use it. */
 export function defaultAdapters(
   selection = process.env.NABI_ADAPTERS,
 ): AgentAdapter[] {
-  const all = [new ClaudeCodeAdapter(), new CodexAdapter()];
+  const all = [
+    new ClaudeCodeAdapter(),
+    new CodexAdapter(),
+    new CursorAdapter(),
+  ];
   if (!selection) return all;
   const wanted = new Set(selection.split(',').map((kind) => kind.trim()));
   return all.filter((adapter) => wanted.has(adapter.kind));

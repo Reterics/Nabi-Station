@@ -10,10 +10,15 @@ import { extname, join, normalize, sep } from 'node:path';
 import {
   clientMessageSchema,
   type AgentNpc,
+  type RecommendationsResult,
   type ServerMessage,
 } from '@nabi/protocol';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { focusAgentWindow, type FocusResult } from './focus';
+import {
+  buildPrompt,
+  recommend as recommendWithOllama,
+} from './insight/ollama';
 import type { Station } from './station';
 
 export const PROTOCOL = 'nabi.v1';
@@ -40,6 +45,8 @@ export interface ServeOptions {
   extraOrigins?: string[];
   /** Brings an agent's window forward; replaceable so tests never steal focus. */
   focus?: (agent: AgentNpc) => Promise<FocusResult>;
+  /** Writes recommendation prose for a prompt; replaceable so tests need no Ollama. */
+  recommend?: (prompt: string) => Promise<RecommendationsResult>;
 }
 
 const sameToken = (a: string, b: string) =>
@@ -51,7 +58,13 @@ const sameToken = (a: string, b: string) =>
  * the per-run token, which the browser sends as a WebSocket subprotocol.
  */
 export async function serve(options: ServeOptions) {
-  const { station, port, token, focus = focusAgentWindow } = options;
+  const {
+    station,
+    port,
+    token,
+    focus = focusAgentWindow,
+    recommend = recommendWithOllama,
+  } = options;
   const allowedHosts = new Set([`${LOOPBACK}:${port}`, `localhost:${port}`]);
   const allowedOrigins = new Set([
     `http://${LOOPBACK}:${port}`,
@@ -104,7 +117,8 @@ export async function serve(options: ServeOptions) {
   });
 
   const send = (ws: WebSocket, message: ServerMessage) =>
-    ws.send(JSON.stringify(message));
+    ws.readyState === ws.OPEN && ws.send(JSON.stringify(message));
+  const generating = new Map<string, Promise<RecommendationsResult>>();
   sockets.on('connection', (ws) => {
     if (station.world) send(ws, { type: 'world', world: station.world });
     let busy = false;
@@ -117,7 +131,28 @@ export async function serve(options: ServeOptions) {
       } catch {
         return;
       }
-      if (!parsed.success || busy) return;
+      if (!parsed.success) return;
+      if (parsed.data.type === 'recommend-repo') {
+        const { repoId } = parsed.data;
+        const repo = station.world?.repos.find((repo) => repo.id === repoId);
+        const insight = repo && station.insight(repo.path);
+        if (!repo || !insight) return;
+        send(ws, { type: 'recommendations', repoId, state: 'pending' });
+        const prompt = buildPrompt(
+          repo.name,
+          insight.analysis,
+          insight.excerpts,
+        );
+        // One generation per prompt at a time, shared by every page asking for it.
+        let pending = generating.get(prompt);
+        if (!pending) {
+          pending = recommend(prompt).finally(() => generating.delete(prompt));
+          generating.set(prompt, pending);
+        }
+        send(ws, { type: 'recommendations', repoId, ...(await pending) });
+        return;
+      }
+      if (busy) return;
       const { agentId } = parsed.data;
       const agent = station.world?.agents.find((agent) => agent.id === agentId);
       if (!agent) return;

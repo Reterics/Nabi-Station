@@ -1,4 +1,4 @@
-import type { BuildingSpec } from '@nabi/protocol';
+import { maturities, type BuildingSpec } from '@nabi/protocol';
 
 export type Vec3 = [number, number, number];
 export interface BuildingPart {
@@ -47,32 +47,134 @@ export function generateBuilding(spec: BuildingSpec): BuildingPart[] {
     add('plot-marker', [0, 0.3, 0], [0.7, 0.2, 0.7], '#b2bba2');
     return parts;
   }
+  // Maturity and activity come from the deterministic analysis; fixtures without
+  // one fall back to their tier and look lived-in.
+  const maturity = spec.maturity ?? maturities[spec.tier]!;
+  const activity = spec.activity ?? 'active';
+  const unfinished = maturity === 'prototype';
+  /** Active repositories light every window, quiet ones some, dormant ones none. */
+  const lit = (index: number) =>
+    activity === 'active' || activity === 'recent'
+      ? true
+      : activity === 'quiet'
+        ? (spec.seed + index * 7) % 3 === 0
+        : false;
   add('body', [0, height / 2 + 0.2, 0], [width, height, depth], wall);
-  add('roof', [0, height + 0.28, 0], [width + 0.18, 0.16, depth + 0.18], roof);
+  if (!unfinished)
+    add(
+      'roof',
+      [0, height + 0.28, 0],
+      [width + 0.18, 0.16, depth + 0.18],
+      roof,
+    );
   add('door', [0, 0.52, depth / 2 + 0.025], [0.4, 0.64, 0.05], roof);
   const columns = 3 + (spec.seed % 2);
+  let windowIndex = 0;
   for (let floor = 0; floor < spec.tier; floor++) {
     for (let column = 0; column < columns; column++) {
       const x = (column - (columns - 1) / 2) * (width / (columns + 1));
       const y = 0.65 + floor * 0.57;
+      const front = lit(windowIndex++);
       if (floor > 0 || Math.abs(x) > 0.3)
         add(
           `window-front-${floor}-${column}`,
           [x, y, depth / 2 + 0.03],
           [0.25, 0.28, 0.06],
-          '#f3dea4',
+          front ? '#f3dea4' : '#4c5661',
           'box',
-          true,
+          front,
         );
+      const side = lit(windowIndex++);
       add(
         `window-side-${floor}-${column}`,
         [width / 2 + 0.03, y, (x * depth) / width],
         [0.06, 0.28, 0.25],
-        '#b8d8d1',
+        side ? '#b8d8d1' : '#4c5661',
         'box',
-        true,
+        side,
       );
     }
+  }
+  if (unfinished || maturity === 'developing') {
+    // Scaffolding: all round on a prototype, one side while it is developing.
+    const top = height + (unfinished ? 0.55 : 0.2);
+    const sides = unfinished ? [-1, 1] : [1];
+    for (const side of sides) {
+      const x = side * (width / 2 + 0.14);
+      for (const end of [-1, 1])
+        add(
+          `scaffold-pole-${side}-${end}`,
+          [x, top / 2 + 0.2, end * (depth / 2 + 0.14)],
+          [0.05, top, 0.05],
+          '#c8a35f',
+        );
+      for (let level = 1; level * 0.55 < top; level++)
+        add(
+          `scaffold-plank-${side}-${level}`,
+          [x, 0.2 + level * 0.55, 0],
+          [0.12, 0.04, depth + 0.34],
+          '#a88550',
+        );
+    }
+  }
+  if (unfinished) {
+    // Rebar sticking out of the top floor, and a tower crane beside the plot.
+    for (const [index, [x, z]] of [
+      [-1, -1],
+      [-1, 1],
+      [1, -1],
+      [1, 1],
+    ].entries())
+      add(
+        `rebar-${index}`,
+        [(x! * width) / 2.6, height + 0.45, (z! * depth) / 2.6],
+        [0.04, 0.5, 0.04],
+        '#7d6f62',
+      );
+    const craneX = -width / 2 - 0.55;
+    const mast = height + 1.5;
+    add(
+      'crane-mast',
+      [craneX, mast / 2 + 0.2, -depth / 4],
+      [0.12, mast, 0.12],
+      '#e2b13c',
+    );
+    add(
+      'crane-jib',
+      [craneX + 0.75, mast + 0.2, -depth / 4],
+      [2.1, 0.08, 0.08],
+      '#e2b13c',
+    );
+    add(
+      'crane-counterweight',
+      [craneX - 0.35, mast + 0.12, -depth / 4],
+      [0.3, 0.2, 0.2],
+      '#6b6f73',
+    );
+    add(
+      'crane-cable',
+      [craneX + 1.5, mast - 0.3, -depth / 4],
+      [0.02, 0.95, 0.02],
+      '#3c3f42',
+    );
+  }
+  if (maturity === 'production') {
+    // A finished landmark: lit crown trim and planters at the entrance.
+    add(
+      'crown',
+      [0, height + 0.42, 0],
+      [width * 0.9, 0.12, depth * 0.9],
+      activity === 'dormant' ? '#5d6670' : '#f6d48a',
+      'box',
+      activity !== 'dormant',
+    );
+    for (const side of [-1, 1])
+      add(
+        `planter-${side}`,
+        [side * 0.45, 0.32, depth / 2 + 0.25],
+        [0.24, 0.22, 0.24],
+        '#5f8a5a',
+      );
   }
   if (spec.archetype === 'factory') {
     add(
@@ -138,6 +240,28 @@ export function generateBuilding(spec: BuildingSpec): BuildingPart[] {
         roof,
       );
   }
+  if (spec.modules.includes('lint'))
+    for (const side of [-1, 1])
+      add(
+        `solar-${side}`,
+        [side * width * 0.2, height + 0.4, depth * 0.18],
+        [width * 0.3, 0.04, depth * 0.3],
+        '#33415c',
+      );
+  if (spec.modules.includes('e2e'))
+    add(
+      'test-annex',
+      [width * 0.15, (height * 0.45) / 2 + 0.2, -depth / 2 - 0.28],
+      [width * 0.55, height * 0.45, 0.55],
+      wall,
+    );
+  if (spec.modules.includes('release'))
+    add(
+      'release-banner',
+      [-width / 2 + 0.16, height * 0.55 + 0.2, depth / 2 + 0.06],
+      [0.16, height * 0.6, 0.04],
+      '#e7a773',
+    );
   if (spec.modules.includes('deploy'))
     add(
       'roof-flag',

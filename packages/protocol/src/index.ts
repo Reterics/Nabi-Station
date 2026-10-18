@@ -1,5 +1,19 @@
 import { z } from 'zod';
+import {
+  activityLevels,
+  maturities,
+  repoAnalysisSchema,
+  type RecommendationsResult,
+} from './analysis';
+import { helperSchema } from './helpers';
 
+export * from './analysis';
+export * from './helpers';
+
+/**
+ * Building styles. Chosen from what a repository is (web app, service, 3D, ML, tool,
+ * docs…), not only its language, so a workspace of TypeScript projects still varies.
+ */
 export const archetypes = [
   'office',
   'laboratory',
@@ -7,8 +21,17 @@ export const archetypes = [
   'tower',
   'townhouse',
   'library',
+  'pavilion',
+  'studio',
 ] as const;
 export const characterKinds = ['claude-code', 'codex', 'generic'] as const;
+/** Agent products. Cursor has no character model of its own yet. */
+export const agentKinds = [
+  'claude-code',
+  'codex',
+  'cursor',
+  'generic',
+] as const;
 export const animationClips = [
   'idle',
   'think',
@@ -26,6 +49,8 @@ export const activities = [
   'reading',
   'editing',
   'running-tool',
+  /** Waiting on a helper (MCP server, subagent, web request) it handed work to. */
+  'delegating',
   'waiting-input',
   'waiting-permission',
   'idle',
@@ -34,13 +59,20 @@ export const activities = [
 ] as const;
 export type AnimationClip = (typeof animationClips)[number];
 export type CharacterKind = (typeof characterKinds)[number];
+export type AgentKind = (typeof agentKinds)[number];
 export type AgentActivity = (typeof activities)[number];
+
+/** Cursor sessions wear the generic model until they have their own. */
+export function characterForAgent(kind: AgentKind): CharacterKind {
+  return kind === 'cursor' ? 'generic' : kind;
+}
 
 export const clipForActivity: Record<AgentActivity, AnimationClip> = {
   working: 'think',
   reading: 'read',
   editing: 'type',
   'running-tool': 'operate',
+  delegating: 'idle',
   'waiting-input': 'wave',
   'waiting-permission': 'wave',
   idle: 'idle',
@@ -48,12 +80,27 @@ export const clipForActivity: Record<AgentActivity, AnimationClip> = {
   ended: 'idle',
 };
 
+/** Annexes a building gains for capabilities the analysis found. */
+export const buildingModules = [
+  'tests',
+  'ci',
+  'docs',
+  'container',
+  'deploy',
+  'lint',
+  'e2e',
+  'release',
+] as const;
 export const buildingSchema = z.object({
   archetype: z.enum(archetypes),
   tier: z.number().int().min(0).max(4),
   seed: z.number().int().nonnegative(),
-  modules: z.array(z.enum(['tests', 'ci', 'docs', 'container', 'deploy'])),
+  modules: z.array(z.enum(buildingModules)),
   footprint: z.number().int().min(1).max(3),
+  /** From the deterministic analysis: scaffolding for prototypes, finish for production. */
+  maturity: z.enum(maturities).optional(),
+  /** Lit windows for active repositories, dark ones for dormant. */
+  activity: z.enum(activityLevels).optional(),
 });
 export type BuildingSpec = z.infer<typeof buildingSchema>;
 
@@ -76,12 +123,13 @@ export const repoSchema = z.object({
     ahead: z.number().int().nonnegative(),
     behind: z.number().int().nonnegative(),
   }),
+  analysis: repoAnalysisSchema.optional(),
 });
 export const confidences = ['reported', 'high', 'medium', 'low'] as const;
 export const agentSchema = z.object({
   id: z.string(),
   name: z.string(),
-  kind: z.enum(characterKinds),
+  kind: z.enum(agentKinds),
   /** null when the session's directory is outside every scanned repository. */
   repoId: z.string().nullable(),
   activity: z.enum(activities),
@@ -93,6 +141,8 @@ export const agentSchema = z.object({
   sessionId: z.string().optional(),
   cwd: z.string().optional(),
   updatedAt: z.number().optional(),
+  /** Tools the session has handed work to, newest first. */
+  helpers: z.array(helperSchema).optional(),
 });
 export const worldSchema = z
   .object({
@@ -160,11 +210,15 @@ export const needsAttention = (agent: AgentNpc) =>
 export type ServerMessage =
   | { type: 'world'; world: World }
   | { type: 'error'; message: string }
-  | { type: 'focus-result'; agentId: string; ok: boolean; message: string };
+  | { type: 'focus-result'; agentId: string; ok: boolean; message: string }
+  | ({ type: 'recommendations'; repoId: string } & RecommendationsResult);
 
-/** The only request the page can make: bring a known session's window forward. */
-export const clientMessageSchema = z.object({
-  type: z.literal('focus-agent'),
-  agentId: z.string().max(200),
-});
+/**
+ * What the page can ask for: bring a known session's window forward, or have the
+ * local model write recommendations for a known repository.
+ */
+export const clientMessageSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('focus-agent'), agentId: z.string().max(200) }),
+  z.object({ type: z.literal('recommend-repo'), repoId: z.string().max(200) }),
+]);
 export type ClientMessage = z.infer<typeof clientMessageSchema>;

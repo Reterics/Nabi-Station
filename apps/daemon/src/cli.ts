@@ -24,7 +24,7 @@ process.emitWarning = ((warning: string | Error, ...rest: unknown[]) => {
 }) as typeof process.emitWarning;
 
 const usage = `Usage:
-  nabi agents [--json] [--watch]          List live Claude Code and Codex sessions
+  nabi agents [--json] [--watch]          List live Claude Code, Codex and Cursor sessions
   nabi scan [roots...] [--json]           Scan roots once and print the world
   nabi serve [roots...] [--port 7357]     Run the daemon for the web app
 

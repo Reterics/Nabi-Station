@@ -1,7 +1,15 @@
 import { create } from 'zustand';
-import { needsAttention, type AnimationClip, type World } from '@nabi/protocol';
+import {
+  needsAttention,
+  type AnimationClip,
+  type RecommendationsResult,
+  type World,
+} from '@nabi/protocol';
 import { createDemoWorld } from '../demo/world';
 
+/** `sessions` is home: live sessions and their helpers. `city` browses every repository. */
+export type View = 'sessions' | 'city' | 'gallery';
+export type GalleryKind = 'characters' | 'helpers' | 'buildings';
 export type Selection = { kind: 'repo' | 'agent'; id: string } | null;
 /** `demo` only when `?demo` is in the URL; the others describe the daemon socket. */
 export type Connection = 'demo' | 'connecting' | 'live' | 'offline';
@@ -30,10 +38,13 @@ interface StationState {
   connection: Connection;
   focusStatus: FocusStatus | null;
   setFocusStatus: (status: FocusStatus | null) => void;
+  /** Local-model recommendations per repository id, kept for the page's lifetime. */
+  recommendations: Record<string, RecommendationsResult>;
+  setRecommendations: (repoId: string, result: RecommendationsResult) => void;
   setWorld: (world: World) => void;
   setConnection: (connection: Connection) => void;
-  view: 'city' | 'gallery';
-  gallery: 'characters' | 'buildings';
+  view: View;
+  gallery: GalleryKind;
   tier: number;
   selection: Selection;
   reducedMotion: boolean;
@@ -41,8 +52,8 @@ interface StationState {
   clip: AnimationClip;
   focusRevision: number;
   select: (selection: Selection) => void;
-  setView: (view: 'city' | 'gallery') => void;
-  setGallery: (gallery: 'characters' | 'buildings') => void;
+  setView: (view: View) => void;
+  setGallery: (gallery: GalleryKind) => void;
   setTier: (tier: number) => void;
   setClip: (clip: AnimationClip) => void;
   setReducedMotion: (value: boolean) => void;
@@ -56,21 +67,22 @@ export const useStation = create<StationState>((set, get) => ({
   connection: demoRequested() ? 'demo' : 'offline',
   focusStatus: null,
   setFocusStatus: (focusStatus) => set({ focusStatus }),
+  recommendations: {},
+  setRecommendations: (repoId, result) =>
+    set(({ recommendations }) => ({
+      recommendations: { ...recommendations, [repoId]: result },
+    })),
   setWorld: (world) =>
     set(({ selection }) => ({
       world,
       // Keep the selection while it still exists; repositories and sessions come and go.
-      selection: exists(world, selection)
-        ? selection
-        : world.repos[0]
-          ? { kind: 'repo', id: world.repos[0].id }
-          : null,
+      selection: exists(world, selection) ? selection : firstSelection(world),
     })),
   setConnection: (connection) => set({ connection }),
-  view: 'city',
+  view: 'sessions',
   gallery: 'characters',
   tier: 3,
-  selection: demoRequested() ? { kind: 'repo', id: 'nabi-station' } : null,
+  selection: demoRequested() ? { kind: 'agent', id: 'claude-1' } : null,
   reducedMotion:
     typeof window !== 'undefined' &&
     window.matchMedia('(prefers-reduced-motion: reduce)').matches,
@@ -95,12 +107,21 @@ export const useStation = create<StationState>((set, get) => ({
     const next = attention[(index + 1) % attention.length];
     if (next)
       set(({ focusRevision }) => ({
-        view: 'city',
+        view: get().view === 'gallery' ? 'sessions' : get().view,
         selection: { kind: 'agent', id: next.id },
         focusRevision: focusRevision + 1,
       }));
   },
 }));
+
+/** A session needing an answer first, then any session, then the first repository. */
+function firstSelection(world: World): Selection {
+  const agent =
+    world.agents.find(needsAttention) ??
+    world.agents.find((agent) => agent.activity !== 'ended');
+  if (agent) return { kind: 'agent', id: agent.id };
+  return world.repos[0] ? { kind: 'repo', id: world.repos[0].id } : null;
+}
 
 function exists(world: World, selection: Selection): boolean {
   if (!selection) return false;

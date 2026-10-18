@@ -115,6 +115,14 @@ export class Station extends EventEmitter<{ world: [World] }> {
     });
   }
 
+  /** What the local model may see about a repository; undefined until analysed. */
+  insight(path: string) {
+    const signals = this.signals.get(pathKey(path));
+    return signals?.analysis
+      ? { analysis: signals.analysis, excerpts: signals.excerpts ?? {} }
+      : undefined;
+  }
+
   stop() {
     for (const timer of this.timers) clearInterval(timer);
     this.timers = [];

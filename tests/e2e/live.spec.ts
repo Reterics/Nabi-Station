@@ -69,6 +69,8 @@ test.beforeAll(async () => {
       env: {
         ...process.env,
         NABI_ADAPTERS: 'none',
+        // Ollama may be installed here; tests must not depend on it or the GPU.
+        NABI_OLLAMA: 'off',
         // Keep the test daemon's discovery file out of the real ~/.nabi.
         NABI_HOME: join(root, '.nabi-home'),
         NODE_NO_WARNINGS: '1',
@@ -126,6 +128,12 @@ test('the daemon serves a live city over an authenticated local socket', async (
   await page.goto(appUrl);
   await expect(page.locator('.demo-badge')).toHaveText('Live workspace');
   await expect(page.locator('.connection')).toContainText('Live');
+  // No agent adapters: home says so and offers the workspace, never sample sessions.
+  await expect(
+    page.getByRole('heading', { name: 'No active sessions' }),
+  ).toBeVisible();
+  await expect(page.locator('.session-bubble')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Browse workspace' }).click();
   await expect(page.locator('.plot-label')).toHaveCount(2);
   await page
     .getByLabel('Select repository')
@@ -134,7 +142,27 @@ test('the daemon serves a live city over an authenticated local socket', async (
     page.getByRole('heading', { name: 'garden-api', exact: true }),
   ).toBeVisible();
   await expect(page.getByText('TypeScript · office')).toBeVisible();
-  await expect(page.getByText('Tier 3/4')).toBeVisible();
+  // The deterministic assessment, with the evidence behind each check.
+  await expect(
+    page.getByRole('heading', { name: /^Prototype Score \d+\/100$/ }),
+  ).toBeVisible();
+  await expect(
+    page.locator('.check-row.partial', { hasText: 'Continuous integration' }),
+  ).toContainText('.github/workflows/ci.yml · does not run tests');
+  await expect(
+    page.locator('.check-row.pass', { hasText: 'Container setup' }),
+  ).toContainText('Dockerfile');
+  // Recommendations travel through the daemon; with Ollama off it says so.
+  await page.getByRole('button', { name: 'Write recommendations' }).click();
+  const dialog = page.getByRole('dialog', { name: 'garden-api' });
+  await expect(dialog).toContainText(
+    'Recommendations unavailable: Disabled with NABI_OLLAMA=off',
+  );
+  await dialog.getByRole('button', { name: 'Close' }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.locator('.recommendations-card')).toContainText(
+    'Unavailable: Disabled with NABI_OLLAMA=off',
+  );
   await expect(page.locator('.git-stats')).toContainText('1 untracked');
   await expect(
     page.getByText('Live data · read on this device; nothing leaves it.'),

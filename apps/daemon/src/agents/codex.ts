@@ -1,7 +1,7 @@
 import { readdir } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
-import type { AgentNpc } from '@nabi/protocol';
+import { mcpHelper, type AgentNpc, type Helper } from '@nabi/protocol';
 import { codexHome, displayPath } from '../paths';
 import {
   WAITING_INPUT_WINDOW_MS,
@@ -74,6 +74,60 @@ export function codexActivity(
     : { activity: 'idle', confidence: 'low', detail };
 }
 
+/** One MCP call or web search; only its identity and status, never arguments or results. */
+export interface CodexHelperItem {
+  itemId: string;
+  itemType: string;
+  server: string | null;
+  tool: string | null;
+  status: string | null;
+  createdAtMs: number;
+}
+
+const HELPER_RECENT_MS = 15 * 60_000;
+
+/**
+ * Helpers from a thread's recent items, newest first. A call is running when the
+ * turn is in progress and it is either reported `inProgress` or the turn's last item.
+ */
+export function codexHelpers(
+  items: CodexHelperItem[],
+  turnInProgress: boolean,
+  lastItemId: string | undefined,
+): Helper[] {
+  const helpers = new Map<string, Helper>();
+  for (const item of items) {
+    const identity =
+      item.itemType === 'webSearch'
+        ? { id: 'web', label: 'Web', category: 'web' as const, tool: 'search' }
+        : item.server && item.tool
+          ? mcpHelper(item.server, item.tool)
+          : null;
+    if (!identity) continue;
+    const running =
+      turnInProgress &&
+      (item.status === 'inProgress' || item.itemId === lastItemId);
+    const previous = helpers.get(identity.id);
+    helpers.set(identity.id, {
+      ...identity,
+      state: running
+        ? 'active'
+        : previous?.state === 'active'
+          ? 'active'
+          : item.status === 'failed'
+            ? 'failed'
+            : 'recent',
+      calls: (previous?.calls ?? 0) + 1,
+      lastUsedAt: item.createdAtMs,
+    });
+  }
+  return [...helpers.values()].sort(
+    (a, b) =>
+      Number(b.state === 'active') - Number(a.state === 'active') ||
+      (b.lastUsedAt ?? 0) - (a.lastUsedAt ?? 0),
+  );
+}
+
 /** Highest-versioned `<prefix>_<n>.sqlite`; the version changes with Codex's schema. */
 export function latestVersioned(
   files: string[],
@@ -142,22 +196,48 @@ export class CodexAdapter implements AgentAdapter {
         'SELECT turn_id AS turnId, status FROM thread_turns WHERE thread_id = ? ORDER BY rollout_ordinal DESC LIMIT 1',
       );
       const lastItem = history?.prepare(
-        'SELECT item_type AS itemType FROM thread_items WHERE thread_id = ? AND turn_id = ? ORDER BY rollout_ordinal DESC LIMIT 1',
+        'SELECT item_id AS itemId, item_type AS itemType FROM thread_items WHERE thread_id = ? AND turn_id = ? ORDER BY rollout_ordinal DESC LIMIT 1',
+      );
+      // json_extract keeps arguments and results inside SQLite; only names leave it.
+      const helperItems = history?.prepare(
+        `SELECT item_id AS itemId, item_type AS itemType,
+           json_extract(item_json, '$.server') AS server,
+           json_extract(item_json, '$.tool') AS tool,
+           json_extract(item_json, '$.status') AS status,
+           created_at_ms AS createdAtMs
+         FROM thread_items
+         WHERE thread_id = ? AND item_type IN ('mcpToolCall', 'webSearch') AND created_at_ms > ?
+         ORDER BY rollout_ordinal LIMIT 200`,
       );
       return threads.map((thread) => {
         const turn = lastTurn?.get(thread.id) as
           { turnId: string; status: string } | undefined;
         const item = turn
           ? (lastItem?.get(thread.id, turn.turnId) as
-              { itemType: string } | undefined)
+              { itemId: string; itemType: string } | undefined)
           : undefined;
+        const helpers = codexHelpers(
+          (helperItems?.all(thread.id, now - HELPER_RECENT_MS) ??
+            []) as unknown as CodexHelperItem[],
+          turn?.status === 'inProgress',
+          item?.itemId,
+        );
+        const activity = codexActivity(thread, turn, item?.itemType, now);
+        const active = helpers.filter((helper) => helper.state === 'active');
         const cwd = displayPath(thread.cwd);
         return {
           id: `codex:${thread.id}`,
           name: `Codex · ${basename(cwd) || cwd} ${thread.id.slice(-4)}`,
           kind: this.kind,
           source: `Codex thread state (${thread.source})`,
-          ...codexActivity(thread, turn, item?.itemType, now),
+          ...(activity.activity !== 'failed' && active.length > 0
+            ? {
+                activity: 'delegating' as const,
+                confidence: 'high' as const,
+                detail: `Waiting on ${active.map((helper) => helper.label).join(', ')}`,
+              }
+            : activity),
+          helpers,
           sessionId: thread.id,
           cwd,
           updatedAt: thread.updatedAtMs,

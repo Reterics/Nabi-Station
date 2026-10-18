@@ -111,6 +111,7 @@ export function buildWorld(input: {
           seedFromString(pathKey(repo.path)),
         ),
         git,
+        ...(signals.analysis && { analysis: signals.analysis }),
       })),
     ),
     agents: [...agents.values()].map((agent) => {
