@@ -85,7 +85,8 @@ test('city, selections, keyboard attention, and every asset work without remote 
   await page.getByRole('button', { name: 'Buildings', exact: true }).click();
   await page.getByRole('slider', { name: 'Building tier' }).fill('4');
   await expect(page.getByText('Landmark', { exact: true })).toBeVisible();
-  await expect(page.locator('.gallery-label')).toHaveCount(6);
+  // One showcase building per style.
+  await expect(page.locator('.gallery-label')).toHaveCount(8);
   await page.screenshot({
     path: testInfo.outputPath('buildings.png'),
     fullPage: true,

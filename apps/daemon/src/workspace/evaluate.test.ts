@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { archetypeFor } from './analyze';
 import { evaluate } from './evaluate';
 import type { RepoFacts } from './inspect';
 
@@ -167,5 +168,25 @@ describe('repository evaluation', () => {
       status: 'partial',
       evidence: '.github/workflows/ci.yml · does not run tests',
     });
+  });
+});
+
+describe('building style', () => {
+  const style = (deps: Record<string, string>, files: string[]) =>
+    archetypeFor(
+      'TypeScript',
+      evaluate(
+        facts({
+          files: ['package.json', ...files],
+          texts: { 'package.json': JSON.stringify({ dependencies: deps }) },
+        }),
+        now,
+      ),
+    );
+  it('follows what the project is, not only its language', () => {
+    expect(style({ three: '1' }, source(6))).toBe('studio');
+    expect(style({ react: '1' }, source(6))).toBe('pavilion');
+    expect(style({ fastify: '1' }, source(6))).toBe('office');
+    expect(style({}, ['docs/a.md', 'README.md'])).toBe('library');
   });
 });

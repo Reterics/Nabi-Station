@@ -37,6 +37,25 @@ describe('building generation', () => {
         expect(parts.some((part) => part.id === 'body')).toBe(tier > 0);
       }
   });
+  it('gives every style its own silhouette and seeded variations', () => {
+    const signature = (overrides: Partial<BuildingSpec>) =>
+      generateBuilding({ ...spec, modules: [], ...overrides })
+        .map((part) => `${part.id}:${part.shape}`)
+        .sort()
+        .join(',');
+    const styles = archetypes.map((archetype) => signature({ archetype }));
+    expect(new Set(styles).size).toBe(archetypes.length);
+    const colours = (seed: number) =>
+      generateBuilding({ ...spec, seed })
+        .map((part) => part.color)
+        .join();
+    const variants = new Set(
+      ['a', 'b', 'c', 'd', 'e', 'f'].map((name) =>
+        colours(seedFromString(name)),
+      ),
+    );
+    expect(variants.size).toBeGreaterThan(2);
+  });
   it('shows maturity as construction state and activity as lit windows', () => {
     const ids = (overrides: Partial<BuildingSpec>) =>
       generateBuilding({ ...spec, ...overrides }).map((part) => part.id);

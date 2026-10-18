@@ -13,6 +13,7 @@ import { sessionLine, truncate } from '../panel/sessionLine';
 import { Building } from './Building';
 import { Character } from './Character';
 import { HelperFigure, helperColors } from './Helper';
+import { hashPick, Props, type PropItem } from './Props';
 import { SceneLabel } from './SceneLabel';
 import {
   helperKey,
@@ -251,15 +252,30 @@ function Site({
           <boxGeometry args={[site.width, 0.3, site.depth]} />
           <meshStandardMaterial color="#687480" />
         </mesh>
+        {/* A plaza: paving, planted edges, and a path up to the entrance. */}
         <mesh receiveShadow position={[0, 0.01, 0]}>
           <boxGeometry args={[site.width - 0.6, 0.02, site.depth - 0.6]} />
-          <meshStandardMaterial color="#7b8794" />
+          <meshStandardMaterial color="#9aa4ae" roughness={0.85} />
+        </mesh>
+        {[-1, 1].map((side) => (
+          <mesh
+            key={side}
+            receiveShadow
+            position={[side * (site.width / 2 - 0.55), 0.035, -0.6]}
+          >
+            <boxGeometry args={[0.5, 0.05, site.depth - 2.4]} />
+            <meshStandardMaterial color="#6f9e63" roughness={1} />
+          </mesh>
+        ))}
+        <mesh receiveShadow position={[0, 0.03, site.depth / 4 - 0.6]}>
+          <boxGeometry args={[1.1, 0.02, site.depth / 2 + 0.6]} />
+          <meshStandardMaterial color="#c3c8cc" roughness={0.7} />
         </mesh>
       </group>
       {site.repo ? (
         <group
           position={[building[0], 0.02, building[1]]}
-          scale={0.78}
+          scale={0.95}
           onClick={(event) => {
             if (event.delta > 4) return;
             event.stopPropagation();
@@ -311,11 +327,55 @@ function Site({
   );
 }
 
+/**
+ * Lamps on the corners, trees in the back corners, planters and benches along the
+ * edges: furniture placed clear of the building, the agents and their helpers.
+ */
+function plazaProps(site: SessionSite): PropItem[] {
+  const u = site.width / 2;
+  const v = site.depth / 2;
+  const at = (du: number, dv: number) => {
+    const [x, z] = toWorld(du, dv);
+    return { x: site.centerX + x, z: site.centerZ + z };
+  };
+  const items: PropItem[] = [];
+  for (const su of [-1, 1]) {
+    for (const sv of [-1, 1])
+      items.push({
+        kind: 'lamp',
+        ...at(su * (u - 0.35), sv * (v - 0.35)),
+        rotation: su > 0 ? Math.PI : 0,
+      });
+    items.push(
+      {
+        kind: hashPick(`${site.id}${su}`, ['tree', 'pine', 'poplar'] as const),
+        ...at(su * (u - 0.55), -v + 0.9),
+        scale: 1.1,
+      },
+      {
+        kind: hashPick(`${site.id}${su}b`, ['tree', 'poplar'] as const),
+        ...at(su * (u - 0.55), -0.9),
+        scale: 0.9,
+      },
+      { kind: 'shrub', ...at(su * (u - 0.55), 0.6) },
+      {
+        kind: 'bench',
+        ...at(su * (u - 0.55), v - 1.1),
+        rotation: (su * Math.PI) / 2,
+      },
+      { kind: 'planter', ...at(su * 0.85, v - 0.45) },
+    );
+  }
+  return items;
+}
+
 export function Sessions({ paused }: { paused: boolean }) {
   const world = useStation((state) => state.world);
   const layout = useMemo(() => sessionsLayout(world), [world]);
+  const props = useMemo(() => layout.sites.flatMap(plazaProps), [layout]);
   return (
     <>
+      <Props items={props} />
       {layout.sites.map((site) => (
         <Site
           key={site.id}

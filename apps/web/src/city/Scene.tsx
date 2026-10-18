@@ -1,6 +1,9 @@
 import { Component, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { PCFShadowMap } from 'three';
+import { PCFSoftShadowMap } from 'three';
+import { Lighting } from './Lighting';
+import { carColours, hashPick, Props, type PropItem } from './Props';
+import { sessionsLayout } from './sessionsLayout';
 import { SceneLabel } from './SceneLabel';
 import { seedFromString } from '@nabi/building-gen';
 import {
@@ -57,23 +60,57 @@ function usePageVisible() {
   return visible;
 }
 
-function Tree({ x, z }: { x: number; z: number }) {
-  return (
-    <group position={[x, 0, z]}>
-      <mesh position={[0, 0.35, 0]} castShadow>
-        <cylinderGeometry args={[0.08, 0.1, 0.7, 6]} />
-        <meshStandardMaterial color="#8b7760" />
-      </mesh>
-      <mesh position={[0, 0.92, 0]} castShadow>
-        <icosahedronGeometry args={[0.48, 0]} />
-        <meshStandardMaterial color="#64786f" flatShading />
-      </mesh>
-    </group>
-  );
-}
-
 const midpoints = (values: number[]) =>
   values.slice(1).map((value, index) => (values[index]! + value) / 2);
+
+/** Street lamps and parked cars along the roads, mixed trees along the edges. */
+function districtProps(area: DistrictArea): PropItem[] {
+  const { centerX, width } = area;
+  const items: PropItem[] = [];
+  for (const road of midpoints(area.rows)) {
+    for (
+      let x = centerX - width / 2 + 1.2;
+      x < centerX + width / 2 - 1;
+      x += 2.3
+    ) {
+      items.push(
+        { kind: 'lamp', x, z: road - 0.78, rotation: -Math.PI / 2 },
+        { kind: 'lamp', x: x + 1.15, z: road + 0.78, rotation: Math.PI / 2 },
+      );
+      const key = `${area.id}/${x.toFixed(1)}/${road}`;
+      if (hashPick(key, [true, false, false]))
+        items.push({
+          kind: 'car',
+          x: x + 0.6,
+          z: road + 0.33,
+          color: hashPick(`${key}c`, carColours),
+        });
+      if (hashPick(`${key}w`, [true, false, false, false]))
+        items.push({
+          kind: 'car',
+          x: x - 0.4,
+          z: road - 0.33,
+          rotation: Math.PI,
+          color: hashPick(`${key}d`, carColours),
+        });
+    }
+  }
+  for (const x of [centerX - width / 2 + 0.95, centerX + width / 2 - 0.95])
+    for (const row of area.rows)
+      for (const z of [row - 1.4, row + 1.4])
+        items.push({
+          kind: hashPick(`${x}/${z}`, [
+            'tree',
+            'pine',
+            'poplar',
+            'tree',
+          ] as const),
+          x,
+          z,
+          scale: hashPick(`${x}/${z}s`, [0.9, 1, 1.15]),
+        });
+  return items;
+}
 
 function District({ area }: { area: DistrictArea }) {
   const { centerX, centerZ, width, depth } = area;
@@ -83,17 +120,29 @@ function District({ area }: { area: DistrictArea }) {
     { length: Math.max(0, Math.floor((width - 2) / 2)) },
     (_, index) => centerX - (width - 2) / 2 + 1 + index * 2,
   );
+  const props = useMemo(() => districtProps(area), [area]);
   return (
     <>
+      <Props items={props} />
       <mesh receiveShadow position={[centerX, -0.18, centerZ]}>
         <boxGeometry args={[width, 0.35, depth]} />
-        <meshStandardMaterial color="#687480" />
+        <meshStandardMaterial color="#7d8a83" roughness={0.95} />
       </mesh>
       {roadsZ.map((z) => (
         <group key={`road-${z}`}>
+          {[-1, 1].map((side) => (
+            <mesh
+              key={side}
+              receiveShadow
+              position={[centerX, 0.025, z + side * 0.8]}
+            >
+              <boxGeometry args={[width - 1, 0.05, 0.35]} />
+              <meshStandardMaterial color="#c9ccc8" roughness={0.85} />
+            </mesh>
+          ))}
           <mesh receiveShadow position={[centerX, 0.01, z]}>
             <boxGeometry args={[width - 1, 0.02, 1.25]} />
-            <meshStandardMaterial color="#465261" />
+            <meshStandardMaterial color="#3d4550" roughness={0.9} />
           </mesh>
           {dashes.map((x) => (
             <mesh
@@ -113,13 +162,6 @@ function District({ area }: { area: DistrictArea }) {
           <meshStandardMaterial color="#465261" />
         </mesh>
       ))}
-      {[centerX - width / 2 + 0.95, centerX + width / 2 - 0.95].flatMap((x) =>
-        area.rows.flatMap((row) =>
-          [row - 1.4, row + 1.4].map((z) => (
-            <Tree key={`${x}/${z}`} x={x} z={z} />
-          )),
-        ),
-      )}
     </>
   );
 }
@@ -277,9 +319,9 @@ function Gallery({ paused }: { paused: boolean }) {
               <group
                 key={archetype}
                 position={[
-                  ((index % 3) - 1) * 4.5,
+                  ((index % 4) - 1.5) * 4,
                   0.05,
-                  index < 3 ? -2.8 : 2.8,
+                  index < 4 ? -2.8 : 2.8,
                 ]}
               >
                 <Building
@@ -306,6 +348,22 @@ function Gallery({ paused }: { paused: boolean }) {
   );
 }
 
+/** Lights fitted to what the current view shows. */
+function ViewLighting() {
+  const view = useStation((state) => state.view);
+  const world = useStation((state) => state.world);
+  const bounds = useMemo(
+    () =>
+      view === 'sessions'
+        ? sessionsLayout(world).bounds
+        : view === 'city'
+          ? cityLayout(world).bounds
+          : { minX: -8.5, maxX: 8.5, minZ: -6, maxZ: 6 },
+    [view, world],
+  );
+  return <Lighting bounds={bounds} />;
+}
+
 export function Scene() {
   const { view, paused, reducedMotion } = useStation();
   const visible = usePageVisible();
@@ -313,7 +371,7 @@ export function Scene() {
     <SceneBoundary>
       <Canvas
         orthographic
-        shadows={{ type: PCFShadowMap }}
+        shadows={{ type: PCFSoftShadowMap }}
         frameloop="demand"
         dpr={[1, 2]}
         camera={{ position: [18, 18, 18], zoom: 40, near: 0.1, far: 150 }}
@@ -324,18 +382,7 @@ export function Scene() {
           </div>
         }
       >
-        <hemisphereLight args={['#edf2ff', '#576172', 2.5]} />
-        <directionalLight
-          position={[8, 15, 7]}
-          intensity={3}
-          castShadow
-          shadow-mapSize={[2048, 2048]}
-          shadow-camera-left={-12}
-          shadow-camera-right={12}
-          shadow-camera-top={12}
-          shadow-camera-bottom={-12}
-          shadow-normalBias={0.04}
-        />
+        <ViewLighting />
         <Camera />
         {view === 'sessions' ? (
           <Sessions paused={paused || reducedMotion || !visible} />
