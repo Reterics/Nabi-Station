@@ -19,10 +19,16 @@ export function displayPath(path: string): string {
   return result;
 }
 
-/** Comparison key: Windows paths are case-insensitive. */
+/**
+ * Comparison key. Windows directories are case-insensitive, so a drive-letter
+ * path is folded even when this process is not Windows. POSIX paths keep their
+ * case on other systems.
+ */
 export function pathKey(path: string, platform = process.platform): string {
   const display = displayPath(path);
-  return platform === 'win32' ? display.toLowerCase() : display;
+  if (platform === 'win32' || /^[A-Z]:/.test(display))
+    return display.toLowerCase();
+  return display;
 }
 
 /** True when `child` is `parent` or lies inside it. Both are path keys. */

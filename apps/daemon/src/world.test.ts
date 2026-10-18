@@ -16,6 +16,8 @@ describe('paths', () => {
     ])
       expect(displayPath(spelling)).toBe('D:/git/x');
     expect(pathKey('D:/Git/X', 'win32')).toBe(pathKey('d:/git/x', 'win32'));
+    expect(pathKey('d:\\GIT\\a\\src', 'linux')).toBe('d:/git/a/src');
+    expect(pathKey('/tmp/Git', 'linux')).toBe('/tmp/Git');
     expect(isWithin('d:/git/xy', 'd:/git/x')).toBe(false);
     expect(isWithin('d:/git/x/src', 'd:/git/x')).toBe(true);
   });
