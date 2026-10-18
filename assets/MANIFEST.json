@@ -1,0 +1,69 @@
+{
+  "version": 2,
+  "style_key": "Chibi stylized 3D mascot, head ~1/3 of height, A-pose 4-view turnaround on white, flat-shaded hand-painted look, smooth matte materials (full prompts per character in provenance.concept)",
+  "shared": {
+    "build": [
+      "After downloading Meshy clips: node tools/assets/strip-clips.mjs src/characters/<id>/meshy/clip_*.glb (keeps skin + animation, drops the duplicated mesh/texture; only rigged.glb keeps the mesh)",
+      "Blender: runpy tools/blender/assemble_character.py -> assemble('<src>/characters/<id>', '<src>/characters/<id>/<id>.raw.glb')",
+      "npx @gltf-transform/cli@4.2.1 optimize <id>.raw.glb dist/characters/<id>.glb --compress meshopt --texture-compress false --simplify false --instance false"
+    ],
+    "clips": ["idle", "think", "wave", "failed", "celebrate", "walk", "run", "type", "read", "operate"],
+    "library_action_ids": { "idle": 0, "wave": 290, "failed": 316, "celebrate": 306 },
+    "text_to_motion_tasks": {
+      "type": "01a15024-72a1-768d-9557-b09a7a8e82d6",
+      "read": "01a15024-7575-7532-b724-5a22b3d3e794",
+      "operate": "01a15024-783b-7439-9006-5d5db175d5ba",
+      "think": "01a15032-8e41-770f-bce6-1526bafe6ad7"
+    },
+    "text_to_motion_credits": 40,
+    "note": "text-to-motion clips expire 3 days after creation (2026-10-21); new characters after that need new motion tasks"
+  },
+  "assets": [
+    {
+      "id": "character.claude-code",
+      "dist": "dist/characters/claude-code.glb",
+      "bytes": 640300,
+      "triangles": 12410,
+      "concept": { "tool": "Higgsfield", "model": "gpt_image_2_5", "job_ids": ["97b507d9-52a7-4d07-b14f-1108f9076ead", "663e5302-f4bc-4781-9a42-599cceed6a55"], "selected": "97b507d9-52a7-4d07-b14f-1108f9076ead", "look": "terracotta-orange cap and hooded work jacket, cream trousers and gloves, charcoal tool belt, brown boots, cream backpack" },
+      "meshy": {
+        "mesh": "01a15022-5f65-71de-8c72-2484fc601f06",
+        "rig": "01a15024-c126-72d4-b0cb-05de2af30b98",
+        "library_clips": "01a15025-73c5-7288-afe8-d0697a3447cf",
+        "retargets": { "type": "01a15025-95ab-77ba-85a0-30a2417ce042", "read": "01a15025-986a-74ed-b8bf-24bb1c33762b", "operate": "01a15025-9ac4-7569-9e95-dbf8956631e1", "think": "01a15037-323d-72ef-8998-37b32d16cecd" },
+        "credits": 62
+      }
+    },
+    {
+      "id": "character.codex",
+      "dist": "dist/characters/codex.glb",
+      "bytes": 652892,
+      "triangles": 12281,
+      "concept": { "tool": "Higgsfield", "model": "gpt_image_2_5", "job_ids": ["59689c8e-880b-4fb2-a74e-3f71ccf7b53c", "b535f9cb-b428-47a3-a68c-299b6e067d17"], "selected": "59689c8e-880b-4fb2-a74e-3f71ccf7b53c", "look": "deep teal beanie with brass goggles, white shirt, teal padded utility vest, slate cross-body satchel, slate trousers with knee pads, white-and-teal sneakers" },
+      "meshy": {
+        "mesh": "01a15032-66a0-73ea-9c8f-a53e4177582f",
+        "rig": "01a15036-43d1-72f4-8173-43c20a69307b",
+        "library_clips": "01a15037-26a1-7272-8514-1f181673b0a2",
+        "retargets": { "type": "01a15037-281a-7785-81ba-7f5b7d675d52", "read": "01a15037-2adc-72b7-bd31-310f66a9c41f", "operate": "01a15037-2cfa-77a1-a04a-397b57b3687f", "think": "01a15037-2faf-72d8-bacf-c89f8fde8acd" },
+        "credits": 59
+      }
+    },
+    {
+      "id": "character.generic",
+      "dist": "dist/characters/generic.glb",
+      "bytes": 588200,
+      "triangles": 12337,
+      "recolourable": true,
+      "concept": { "tool": "Higgsfield", "model": "gpt_image_2_5", "job_ids": ["0a5ecadc-822a-42a6-8677-ce092162bc5b", "b2dfc303-e59a-47e3-a114-fddb3cfa97cf"], "selected": "b2dfc303-e59a-47e3-a114-fddb3cfa97cf", "look": "yellow hard hat, light-grey shirt and gloves, mid-grey bib overalls with yellow buckles and reflective stripes, dark-grey boots" },
+      "meshy": {
+        "mesh": "01a15032-6de6-7497-931c-001afa684aa2",
+        "rig": "01a15036-9159-77c7-9a57-19a5f9b6342c",
+        "library_clips": "01a15037-ab21-77b1-96c7-2b208c68bbeb",
+        "retargets": { "type": "01a15037-ac9b-7068-810c-209575882870", "read": "01a15037-af0d-70e2-950d-9b7e120a9961", "operate": "01a15037-b1c2-7367-a97b-336b6c5f9619", "think": "01a15037-b3ec-7690-84e2-af2460ce6f57" },
+        "credits": 59
+      }
+    }
+  ],
+  "meshy_credits_total": 220,
+  "higgsfield_images": 6,
+  "license_review": "pending (S7): confirm Higgsfield and Meshy output terms for redistribution"
+}

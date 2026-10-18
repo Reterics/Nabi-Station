@@ -1,0 +1,12 @@
+{
+  "name": "@nabi-station/tools",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "strip-clips": "node assets/strip-clips.mjs"
+  },
+  "devDependencies": {
+    "@gltf-transform/core": "4.2.1",
+    "@gltf-transform/functions": "4.2.1"
+  }
+}

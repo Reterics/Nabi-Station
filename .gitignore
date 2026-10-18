@@ -1,0 +1,70 @@
+# Local IDE and operating-system files.
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+*~
+
+# Local credentials and environment overrides; keep shareable templates.
+.env
+.env.*
+!.env.example
+!.env.*.example
+!.env.sample
+!.env.template
+*.local
+
+# JavaScript dependencies, caches, and generated output.
+node_modules/
+.pnpm-store/
+.npm/
+.yarn/cache/
+.yarn/unplugged/
+.yarn/install-state.gz
+.turbo/
+.vite/
+.cache/
+.next/
+.output/
+coverage/
+*.tsbuildinfo
+dist/
+build/
+out/
+# Optimized models and textures are project assets, not disposable builds.
+!assets/dist/
+!assets/dist/**
+
+# Test runner output: Playwright screenshots, traces and reports.
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+
+# Rust / Tauri build output. Keep Cargo.lock for reproducible app builds.
+target/
+
+# Python / Blender tooling caches and local environments.
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Blender automatic backups; keep the editable .blend sources.
+*.blend[0-9]*
+*.blend@
+
+# Logs and temporary files.
+*.log
+*.tmp
+*.temp
