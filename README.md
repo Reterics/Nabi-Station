@@ -1,6 +1,17 @@
 # Nabi Station
 
-A local workspace dashboard, drawn as an isometric neighbourhood. It shows **your real repositories and live Claude Code, Codex and Cursor sessions**, read on this machine by a local daemon without modifying either tool. Without the daemon it shows nothing but a "Not connected" notice; sample data appears only at `?demo`.
+[![CI](https://github.com/Reterics/Nabi-Station/actions/workflows/ci.yml/badge.svg)](https://github.com/Reterics/Nabi-Station/actions/workflows/ci.yml)
+[![Node.js](https://img.shields.io/badge/Node.js-22.13%2B-339933?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
+[![pnpm](https://img.shields.io/badge/pnpm-9.9.0-F69220?logo=pnpm&logoColor=white)](https://pnpm.io/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![React](https://img.shields.io/badge/React-19-149ECA?logo=react&logoColor=white)](https://react.dev/)
+[![Three.js](https://img.shields.io/badge/Three.js-0.186-000000?logo=threedotjs&logoColor=white)](https://threejs.org/)
+
+Nabi Station is the isometric view of the repositories and coding agents already running on this machine. Claude Code, Codex, and Cursor stay visible when the screens are on something else. Each repository is checked for documentation, tests, and the rest of the quality bar, and a local Gemma model writes the recommendation and a prompt to paste back into the agent.
+
+![Active sessions in the demo workspace. Each project is a block, each agent has a status, and the side panel lists the repository checks.](docs/active-sessions.png)
+
+A local daemon reads those sessions without modifying either tool. Without it the page shows a "Not connected" notice. Sample data appears only at `?demo`.
 
 ## Run locally
 

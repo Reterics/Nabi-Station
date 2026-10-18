@@ -5,7 +5,7 @@ import {
   type RecommendationsResult,
   type World,
 } from '@nabi/protocol';
-import { createDemoWorld } from '../demo/world';
+import { createDemoWorld, demoRecommendations } from '../demo/world';
 
 /** `sessions` is home: live sessions and their helpers. `city` browses every repository. */
 export type View = 'sessions' | 'city' | 'gallery';
@@ -13,6 +13,9 @@ export type GalleryKind = 'characters' | 'helpers' | 'buildings';
 export type Selection = { kind: 'repo' | 'agent'; id: string } | null;
 /** `demo` only when `?demo` is in the URL; the others describe the daemon socket. */
 export type Connection = 'demo' | 'connecting' | 'live' | 'offline';
+
+/** Model name shown on the demo's example recommendations. */
+export const DEMO_MODEL = 'example (demo)';
 
 /** Fixture data is never shown unless explicitly asked for. */
 export const demoRequested = () =>
@@ -67,7 +70,21 @@ export const useStation = create<StationState>((set, get) => ({
   connection: demoRequested() ? 'demo' : 'offline',
   focusStatus: null,
   setFocusStatus: (focusStatus) => set({ focusStatus }),
-  recommendations: {},
+  // The demo carries example recommendations, labelled as such in the panel.
+  recommendations: demoRequested()
+    ? Object.fromEntries(
+        Object.entries(demoRecommendations).map(([repoId, recommendations]) => [
+          repoId,
+          {
+            state: 'ready' as const,
+            recommendations,
+            model: DEMO_MODEL,
+            generatedAt: Date.UTC(2026, 9, 18, 14, 20),
+            cached: true,
+          },
+        ]),
+      )
+    : {},
   setRecommendations: (repoId, result) =>
     set(({ recommendations }) => ({
       recommendations: { ...recommendations, [repoId]: result },
@@ -82,7 +99,7 @@ export const useStation = create<StationState>((set, get) => ({
   view: 'sessions',
   gallery: 'characters',
   tier: 3,
-  selection: demoRequested() ? { kind: 'agent', id: 'claude-1' } : null,
+  selection: demoRequested() ? { kind: 'agent', id: 'claude-assets' } : null,
   reducedMotion:
     typeof window !== 'undefined' &&
     window.matchMedia('(prefers-reduced-motion: reduce)').matches,

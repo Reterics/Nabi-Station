@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import type { Repo } from '@nabi/protocol';
 import { requestRecommendations } from '../live/connection';
-import { useStation } from '../state/store';
+import { DEMO_MODEL, useStation } from '../state/store';
 
 /** Clipboard API first; a hidden textarea where it is unavailable or refused. */
 async function copyText(text: string): Promise<boolean> {
@@ -159,17 +159,26 @@ function RecommendationsDialog({
                 <h3>Fix with an AI agent</h3>
                 <p className="muted">
                   A task for Claude Code, Codex or Cursor covering the {target}{' '}
-                  items, written by Gemma. Paste it into a session running in
-                  this repository.
+                  items. Paste it into a session running in this repository.
                 </p>
                 <pre tabIndex={0}>{fixes!.agentPrompt}</pre>
               </div>
             )}
             <p className="panel-footnote">
-              Generated locally by {result.model} ·{' '}
-              {new Date(result.generatedAt).toLocaleString()}
-              {result.cached ? ' · cached' : ''}. Advice only; the maturity and
-              checks are rule-based.
+              {result.model === DEMO_MODEL ? (
+                <>
+                  Example recommendations for the demo workspace. With the
+                  daemon, a local Gemma model writes these for your own
+                  repositories.
+                </>
+              ) : (
+                <>
+                  Generated locally by {result.model} ·{' '}
+                  {new Date(result.generatedAt).toLocaleString()}
+                  {result.cached ? ' · cached' : ''}. Advice only; the maturity
+                  and checks are rule-based.
+                </>
+              )}
             </p>
           </>
         )}
@@ -191,12 +200,15 @@ export function Recommendations({ repo, live }: { repo: Repo; live: boolean }) {
   const high =
     ready?.recommendedImprovements.filter((item) => item.priority === 'high')
       .length ?? 0;
+  // Demo data only ever shows its built-in examples, never anything generated.
+  const usable = live || Boolean(ready);
   return (
     <div className="detail-section recommendations-card">
       <h3>
-        Recommendations <span className="subtle">local model</span>
+        Recommendations{' '}
+        <span className="subtle">{live ? 'local model' : 'demo example'}</span>
       </h3>
-      {!live ? (
+      {!usable ? (
         <p className="muted">
           Written by a local Gemma model through Ollama when the daemon runs.
           Nothing is generated for demo data.
@@ -233,7 +245,7 @@ export function Recommendations({ repo, live }: { repo: Repo; live: boolean }) {
           </div>
         </>
       )}
-      {live && (
+      {usable && (
         <RecommendationsDialog
           repo={repo}
           open={open}

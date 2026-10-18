@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { create } from 'zustand';
 
 interface LabelState {
@@ -19,7 +19,45 @@ export const useLabels = create<LabelState>((set) => ({
     }),
 }));
 
+/** Labels sit above the canvas. A wheel over one would otherwise never
+ * reach MapControls, so zoom dies while the pointer is on a name. */
+function forwardWheelToCanvas(event: WheelEvent) {
+  const overlay = event.currentTarget;
+  if (!(overlay instanceof HTMLElement)) return;
+  const canvas = overlay.parentElement?.querySelector('canvas');
+  if (!canvas) return;
+  event.preventDefault();
+  canvas.dispatchEvent(
+    new WheelEvent('wheel', {
+      bubbles: true,
+      cancelable: true,
+      view: window,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      deltaX: event.deltaX,
+      deltaY: event.deltaY,
+      deltaZ: event.deltaZ,
+      deltaMode: event.deltaMode,
+      ctrlKey: event.ctrlKey,
+      shiftKey: event.shiftKey,
+      altKey: event.altKey,
+      metaKey: event.metaKey,
+    }),
+  );
+}
+
 export function SceneLabels() {
   const labels = useLabels((state) => state.labels);
-  return <div className="scene-labels">{Object.values(labels)}</div>;
+  const overlay = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const node = overlay.current;
+    if (!node) return;
+    node.addEventListener('wheel', forwardWheelToCanvas, { passive: false });
+    return () => node.removeEventListener('wheel', forwardWheelToCanvas);
+  }, []);
+  return (
+    <div className="scene-labels" ref={overlay}>
+      {Object.values(labels)}
+    </div>
+  );
 }
