@@ -5,11 +5,15 @@
 *.bat text eol=crlf
 *.cmd text eol=crlf
 
-# Source models and runtime assets (including assets/dist) use Git LFS.
+# Authoring sources use Git LFS. CI never checks them out.
 *.blend filter=lfs diff=lfs merge=lfs -text
 *.glb filter=lfs diff=lfs merge=lfs -text
 *.fbx filter=lfs diff=lfs merge=lfs -text
 *.bin filter=lfs diff=lfs merge=lfs -text
+
+# Runtime models are ordinary git blobs. The build and asset tests read these,
+# and they are small enough that CI does not need a Git LFS download.
+assets/dist/** -filter -diff -merge binary
 
 # Concept art, textures, and layered image sources.
 *.png filter=lfs diff=lfs merge=lfs -text

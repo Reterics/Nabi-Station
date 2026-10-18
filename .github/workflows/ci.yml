@@ -15,9 +15,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          # The asset tests read the real character GLBs.
-          lfs: true
+        env:
+          # Skip LFS smudge. Runners have Git LFS filters installed, so a
+          # normal checkout would still download every pointer and fail the
+          # job when that download fails. assets/dist is not in LFS.
+          GIT_LFS_SKIP_SMUDGE: 1
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:

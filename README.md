@@ -15,11 +15,9 @@ A local daemon reads those sessions without modifying either tool. Without it th
 
 ## Run locally
 
-Requires Node.js 22.13+ (for `node:sqlite`) and pnpm 9.9.0 (the pinned package manager), plus Git LFS for the character assets.
+Requires Node.js 22.13+ (for `node:sqlite`) and pnpm 9.9.0 (the pinned package manager). The character models the app serves live in `assets/dist` as ordinary git files. Git LFS is only needed to edit the source files under `assets/src` (`git lfs install` and `git lfs pull`).
 
 ```sh
-git lfs install
-git lfs pull
 pnpm install
 pnpm dev
 ```
@@ -106,7 +104,7 @@ apps/daemon/              Node CLI and local daemon (`pnpm nabi …`)
   src/server.ts           Loopback HTTP + authenticated WebSocket
 packages/protocol/        Shared types and Zod world validation
 packages/building-gen/    Pure BuildingSpec → geometry; deterministic district layout
-assets/dist/             Versioned runtime GLBs, tracked by Git LFS
+assets/dist/             Versioned runtime GLBs (ordinary git files, not LFS)
 assets/src/              Editable source assets (not served by the app)
 tools/                   Existing, separately managed npm asset tooling
 tests/                   Asset, contract, and browser tests

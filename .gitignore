@@ -48,6 +48,9 @@ playwright-report/
 blob-report/
 playwright/.cache/
 
+# Demo video frames and renders (scripts/record-demo.mjs).
+demo-video/
+
 # Rust / Tauri build output. Keep Cargo.lock for reproducible app builds.
 target/
 
