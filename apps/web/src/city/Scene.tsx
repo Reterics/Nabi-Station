@@ -2,7 +2,13 @@ import { Component, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { PCFSoftShadowMap } from 'three';
 import { Lighting } from './Lighting';
-import { carColours, hashPick, Props, type PropItem } from './Props';
+import {
+  carColours,
+  flowerColours,
+  hashPick,
+  Props,
+  type PropItem,
+} from './Props';
 import { sessionsLayout } from './sessionsLayout';
 import { SceneLabel } from './SceneLabel';
 import { seedFromString } from '@nabi/building-gen';
@@ -11,7 +17,6 @@ import {
   buildingModules,
   characterForAgent,
   characterKinds,
-  clipForActivity,
   helperCategories,
   helperCategoryNames,
   maturities,
@@ -22,7 +27,8 @@ import { agentKindName } from '../panel/sessionLine';
 import { selectedRepoId, useStation } from '../state/store';
 import { Building } from './Building';
 import { Camera } from './Camera';
-import { Character } from './Character';
+import { Effects } from './Effects';
+import { AgentCharacter, Character } from './Character';
 import { HelperFigure } from './Helper';
 import { cityLayout, type DistrictArea } from './layout';
 import { Sessions } from './Sessions';
@@ -78,6 +84,18 @@ function districtProps(area: DistrictArea): PropItem[] {
         { kind: 'lamp', x: x + 1.15, z: road + 0.78, rotation: Math.PI / 2 },
       );
       const key = `${area.id}/${x.toFixed(1)}/${road}`;
+      const kerbside = hashPick(`${key}k`, [
+        'bin',
+        'hydrant',
+        'bin',
+        null,
+      ] as const);
+      if (kerbside)
+        items.push({
+          kind: kerbside,
+          x: x + 0.55,
+          z: road + (kerbside === 'bin' ? -0.85 : 0.85),
+        });
       if (hashPick(key, [true, false, false]))
         items.push({
           kind: 'car',
@@ -109,8 +127,52 @@ function districtProps(area: DistrictArea): PropItem[] {
           z,
           scale: hashPick(`${x}/${z}s`, [0.9, 1, 1.15]),
         });
+  // Zebra crossings where the lanes between columns meet a road, either side.
+  for (const road of midpoints(area.rows))
+    for (const lane of midpoints(area.columns))
+      for (const side of [-1, 1])
+        items.push({ kind: 'crosswalk', x: lane + side * 0.6, z: road });
   return items;
 }
+
+/**
+ * Lawn dressing on each plot: flower beds either side of the entrance path and
+ * hedges along the back corners, clear of the widest foundations (3.4 × 3.1).
+ */
+function plotProps(x: number, z: number, key: string): PropItem[] {
+  const items: PropItem[] = [];
+  /** Top of the lawn (plot group at 0.04, lawn slab to 0.075). */
+  const y = 0.115;
+  for (const side of [-1, 1]) {
+    items.push(
+      {
+        kind: 'flowers',
+        x: x + side * 1.45,
+        y,
+        z: z + 1.68,
+        color: hashPick(`${key}${side}f`, flowerColours),
+      },
+      {
+        kind: 'hedge',
+        x: x + side * 1.3,
+        y,
+        z: z - 1.72,
+        scale: hashPick(`${key}${side}h`, [0.8, 1, 1.1]),
+      },
+    );
+    if (hashPick(`${key}${side}b`, [true, false]))
+      items.push({ kind: 'bollard', x: x + side * 0.45, y, z: z + 1.78 });
+  }
+  return items;
+}
+
+/** Tended lawns for repositories in use, drier ones for those left alone. */
+const lawnColour = (activity?: string) =>
+  activity === 'dormant'
+    ? '#9aa37a'
+    : activity === 'quiet'
+      ? '#86a466'
+      : '#74a65f';
 
 function District({ area }: { area: DistrictArea }) {
   const { centerX, centerZ, width, depth } = area;
@@ -174,8 +236,18 @@ function City({ paused }: { paused: boolean }) {
     () => new Map(world.repos.map((repo) => [repo.id, repo])),
     [world],
   );
+  const lawns = useMemo(
+    () =>
+      world.districts
+        .flatMap((district) => district.plots)
+        .flatMap((plot) =>
+          plotProps(plot.position.x, plot.position.z, plot.id),
+        ),
+    [world],
+  );
   return (
     <>
+      <Props items={lawns} />
       {layout.districts.map((area) => (
         <District key={area.id} area={area} />
       ))}
@@ -194,11 +266,24 @@ function City({ paused }: { paused: boolean }) {
                 select({ kind: 'repo', id: repo.id });
               }}
             >
+              {/* A kerbed plot: lawn, with a paved path from the street to the door. */}
               <mesh position={[0, 0.02, 0]} receiveShadow>
                 <boxGeometry args={[3.6, 0.08, 3.75]} />
                 <meshStandardMaterial
-                  color={selected === repo.id ? '#7faae4' : '#8995a3'}
+                  color={selected === repo.id ? '#7faae4' : '#c9cdc8'}
+                  roughness={0.85}
                 />
+              </mesh>
+              <mesh position={[0, 0.065, 0]} receiveShadow>
+                <boxGeometry args={[3.36, 0.02, 3.51]} />
+                <meshStandardMaterial
+                  color={lawnColour(repo.building.activity)}
+                  roughness={1}
+                />
+              </mesh>
+              <mesh position={[0, 0.08, 1.45]} receiveShadow>
+                <boxGeometry args={[0.7, 0.02, 0.85]} />
+                <meshStandardMaterial color="#d8d4ca" roughness={0.8} />
               </mesh>
               <Building
                 spec={repo.building}
@@ -232,9 +317,9 @@ function City({ paused }: { paused: boolean }) {
             }}
           >
             <group scale={1.05}>
-              <Character
+              <AgentCharacter
                 kind={characterForAgent(agent.kind)}
-                clip={clipForActivity[agent.activity]}
+                activity={agent.activity}
                 paused={paused}
               />
             </group>
@@ -297,7 +382,14 @@ function Gallery({ paused }: { paused: boolean }) {
           ))
         : gallery === 'characters'
           ? characterKinds.map((kind, index) => (
-              <group key={kind} position={[(index - 1) * 4, 0.05, 0]}>
+              <group
+                key={kind}
+                position={[
+                  (index - (characterKinds.length - 1) / 2) * 4,
+                  0.05,
+                  0,
+                ]}
+              >
                 <mesh receiveShadow position={[0, 0.08, 0]}>
                   <cylinderGeometry args={[1.35, 1.45, 0.16, 48]} />
                   <meshStandardMaterial color="#a6b1c0" />
@@ -384,6 +476,7 @@ export function Scene() {
       >
         <ViewLighting />
         <Camera />
+        <Effects />
         {view === 'sessions' ? (
           <Sessions paused={paused || reducedMotion || !visible} />
         ) : view === 'city' ? (

@@ -24,8 +24,13 @@ export const archetypes = [
   'pavilion',
   'studio',
 ] as const;
-export const characterKinds = ['claude-code', 'codex', 'generic'] as const;
-/** Agent products. Cursor has no character model of its own yet. */
+export const characterKinds = [
+  'claude-code',
+  'codex',
+  'cursor',
+  'generic',
+] as const;
+/** Agent products; each wears the character model of the same name. */
 export const agentKinds = [
   'claude-code',
   'codex',
@@ -62,9 +67,8 @@ export type CharacterKind = (typeof characterKinds)[number];
 export type AgentKind = (typeof agentKinds)[number];
 export type AgentActivity = (typeof activities)[number];
 
-/** Cursor sessions wear the generic model until they have their own. */
 export function characterForAgent(kind: AgentKind): CharacterKind {
-  return kind === 'cursor' ? 'generic' : kind;
+  return kind;
 }
 
 export const clipForActivity: Record<AgentActivity, AnimationClip> = {

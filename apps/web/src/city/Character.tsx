@@ -1,11 +1,24 @@
-import { Component, Suspense, useEffect, useMemo, type ReactNode } from 'react';
+import {
+  Component,
+  Suspense,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import { SceneLabel } from './SceneLabel';
 import { useFrame, useLoader, useThree } from '@react-three/fiber';
 import { AnimationMixer, type Mesh } from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { clone } from 'three/addons/utils/SkeletonUtils.js';
-import type { AnimationClip, CharacterKind } from '@nabi/protocol';
+import {
+  clipForActivity,
+  type AgentActivity,
+  type AnimationClip,
+  type CharacterKind,
+} from '@nabi/protocol';
 
 class ModelBoundary extends Component<
   { children: ReactNode; name: string },
@@ -93,6 +106,48 @@ function AnimatedModel({
       </SceneLabel>
     </>
   );
+}
+
+const busy = new Set<AgentActivity>([
+  'working',
+  'reading',
+  'editing',
+  'running-tool',
+  'delegating',
+]);
+const CELEBRATE_MS = 2400;
+
+/**
+ * The clip for an activity, plus a short cheer when a turn finishes cleanly
+ * (busy, then waiting for input or idle). Failures keep their own clip.
+ */
+export function useActivityClip(activity: AgentActivity): AnimationClip {
+  const previous = useRef(activity);
+  const [cheering, setCheering] = useState(false);
+  useEffect(() => {
+    const finished =
+      busy.has(previous.current) &&
+      (activity === 'waiting-input' || activity === 'idle');
+    previous.current = activity;
+    if (!finished) {
+      setCheering(false);
+      return;
+    }
+    setCheering(true);
+    const timer = setTimeout(() => setCheering(false), CELEBRATE_MS);
+    return () => clearTimeout(timer);
+  }, [activity]);
+  return cheering ? 'celebrate' : clipForActivity[activity];
+}
+
+/** A character playing whatever its agent is doing. */
+export function AgentCharacter(props: {
+  kind: CharacterKind;
+  activity: AgentActivity;
+  paused: boolean;
+}) {
+  const clip = useActivityClip(props.activity);
+  return <Character kind={props.kind} clip={clip} paused={props.paused} />;
 }
 
 export function Character(props: {

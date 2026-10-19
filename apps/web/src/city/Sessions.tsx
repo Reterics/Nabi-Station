@@ -3,7 +3,6 @@ import { useFrame, useThree } from '@react-three/fiber';
 import type { Mesh } from 'three';
 import {
   characterForAgent,
-  clipForActivity,
   needsAttention,
   type AgentNpc,
   type Helper,
@@ -11,7 +10,7 @@ import {
 import { useStation } from '../state/store';
 import { sessionLine, truncate } from '../panel/sessionLine';
 import { Building } from './Building';
-import { Character } from './Character';
+import { AgentCharacter } from './Character';
 import { HelperFigure, helperColors } from './Helper';
 import { hashPick, Props, type PropItem } from './Props';
 import { SceneLabel } from './SceneLabel';
@@ -202,9 +201,9 @@ function SessionAgent({
           />
         </mesh>
         <group position={[0, 0.06, 0]} rotation={[0, facing, 0]} scale={1.6}>
-          <Character
+          <AgentCharacter
             kind={characterForAgent(agent.kind)}
-            clip={clipForActivity[agent.activity]}
+            activity={agent.activity}
             paused={paused}
           />
         </group>

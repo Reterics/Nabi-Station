@@ -18,12 +18,28 @@ import {
 } from 'three';
 
 export type PropKind =
-  'tree' | 'pine' | 'poplar' | 'lamp' | 'bench' | 'car' | 'planter' | 'shrub';
+  | 'tree'
+  | 'pine'
+  | 'poplar'
+  | 'lamp'
+  | 'bench'
+  | 'car'
+  | 'planter'
+  | 'shrub'
+  | 'hedge'
+  | 'flowers'
+  | 'hydrant'
+  | 'bin'
+  | 'bollard'
+  | 'crates'
+  | 'crosswalk';
 
 export interface PropItem {
   kind: PropKind;
   x: number;
   z: number;
+  /** Ground height; 0 is street level. */
+  y?: number;
   /** Yaw in radians. */
   rotation?: number;
   scale?: number;
@@ -54,6 +70,10 @@ const paint = new MeshStandardMaterial({
 });
 const bark = standard('#7a6250', 0.9);
 const metal = standard('#3d4450', 0.4, 0.7);
+const soil = standard('#6b5444', 1);
+const kerb = standard('#d9dbd6', 0.85);
+const stripe = new MeshStandardMaterial({ color: '#e9ecef', roughness: 0.7 });
+const crate = standard('#b08a5a', 0.85);
 const bulb = new MeshStandardMaterial({
   color: '#fff1c9',
   emissive: '#ffe2a0',
@@ -185,6 +205,116 @@ const kit: Record<PropKind, Piece[]> = {
       tinted: true,
     },
   ],
+  hedge: [
+    {
+      geometry: new BoxGeometry(0.8, 0.24, 0.24),
+      material: foliage,
+      offset: [0, 0.14, 0],
+      tinted: true,
+    },
+  ],
+  /** A kerbed bed; the blooms take the item's tint. */
+  flowers: [
+    {
+      geometry: new BoxGeometry(0.5, 0.06, 0.26),
+      material: kerb,
+      offset: [0, 0.03, 0],
+    },
+    {
+      geometry: new BoxGeometry(0.44, 0.04, 0.2),
+      material: soil,
+      offset: [0, 0.06, 0],
+      shadow: false,
+    },
+    ...(
+      [
+        [-0.15, 0.04],
+        [-0.03, -0.05],
+        [0.08, 0.05],
+        [0.17, -0.03],
+      ] as const
+    ).map(([x, z]) => ({
+      geometry: new IcosahedronGeometry(0.055, 0),
+      material: foliage,
+      offset: [x, 0.12, z] as [number, number, number],
+      tinted: true,
+      shadow: false,
+    })),
+  ],
+  hydrant: [
+    {
+      geometry: new CylinderGeometry(0.045, 0.055, 0.2, 8),
+      material: paint,
+      offset: [0, 0.1, 0],
+      tinted: true,
+    },
+    {
+      geometry: new SphereGeometry(0.05, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2),
+      material: paint,
+      offset: [0, 0.2, 0],
+      tinted: true,
+    },
+    {
+      geometry: new BoxGeometry(0.15, 0.035, 0.035),
+      material: metal,
+      offset: [0, 0.13, 0],
+    },
+  ],
+  bin: [
+    {
+      geometry: new CylinderGeometry(0.07, 0.06, 0.2, 10),
+      material: standard('#3f6d55', 0.6, 0.3),
+      offset: [0, 0.1, 0],
+    },
+    {
+      geometry: new CylinderGeometry(0.075, 0.075, 0.025, 10),
+      material: metal,
+      offset: [0, 0.21, 0],
+    },
+  ],
+  bollard: [
+    {
+      geometry: new CylinderGeometry(0.03, 0.035, 0.18, 8),
+      material: metal,
+      offset: [0, 0.09, 0],
+    },
+    {
+      geometry: new CylinderGeometry(0.031, 0.031, 0.025, 8),
+      material: bulb,
+      offset: [0, 0.15, 0],
+      shadow: false,
+    },
+  ],
+  crates: [
+    {
+      geometry: new BoxGeometry(0.42, 0.05, 0.32),
+      material: standard('#8f7350', 0.9),
+      offset: [0, 0.025, 0],
+    },
+    {
+      geometry: new BoxGeometry(0.18, 0.16, 0.18),
+      material: crate,
+      offset: [-0.1, 0.13, -0.05],
+    },
+    {
+      geometry: new BoxGeometry(0.16, 0.14, 0.16),
+      material: crate,
+      offset: [0.11, 0.12, 0.04],
+    },
+    {
+      geometry: new BoxGeometry(0.14, 0.12, 0.14),
+      material: paint,
+      offset: [-0.08, 0.27, -0.04],
+      tinted: true,
+    },
+  ],
+  /** Zebra stripes across a 1.25-wide road; rotate for roads along Z. */
+  crosswalk: [-0.48, -0.24, 0, 0.24, 0.48].map((z) => ({
+    geometry: new BoxGeometry(0.42, 0.012, 0.11),
+    material: stripe,
+    offset: [0, 0.026, z] as [number, number, number],
+    shadow: false,
+  })),
 };
 
 const defaultTint: Record<PropKind, string> = {
@@ -196,7 +326,22 @@ const defaultTint: Record<PropKind, string> = {
   car: '#d9dde2',
   planter: '#5e9a5c',
   shrub: '#6b9b5a',
+  hedge: '#5a8f52',
+  flowers: '#f2b134',
+  hydrant: '#d9473b',
+  bin: '#ffffff',
+  bollard: '#ffffff',
+  crates: '#3d7ea6',
+  crosswalk: '#ffffff',
 };
+
+export const flowerColours = [
+  '#f2b134',
+  '#e2609c',
+  '#f4f1ea',
+  '#e76f51',
+  '#b07cf0',
+];
 
 const matrix = new Matrix4();
 const local = new Matrix4();
@@ -221,7 +366,7 @@ function PieceInstances({ piece, items }: { piece: Piece; items: PropItem[] }) {
       const size = item.scale ?? 1;
       matrix
         .compose(
-          position.set(item.x, 0, item.z),
+          position.set(item.x, item.y ?? 0, item.z),
           quaternion.setFromEuler(euler.set(0, item.rotation ?? 0, 0)),
           scale.set(size, size, size),
         )

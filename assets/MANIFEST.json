@@ -48,6 +48,20 @@
       }
     },
     {
+      "id": "character.cursor",
+      "dist": "dist/characters/cursor.glb",
+      "bytes": 672208,
+      "triangles": 12458,
+      "concept": { "tool": "Higgsfield", "model": "gpt_image_2_5", "job_ids": ["3888fb37-a8ea-47f8-a8c9-4f33289e1463", "d4255f19-bd61-457b-bc17-dca23ee3a910", "e0a40abd-17f5-45d1-840f-5fd75e9d0e2f", "13964eb2-e591-461e-a10e-d1def9d54ccf"], "selected": "3888fb37-a8ea-47f8-a8c9-4f33289e1463", "views": { "front": "3888fb37-a8ea-47f8-a8c9-4f33289e1463", "side": "e0a40abd-17f5-45d1-840f-5fd75e9d0e2f", "back": "13964eb2-e591-461e-a10e-d1def9d54ccf" }, "style_reference": "codex/concept/front.png", "look": "charcoal zip hoodie with silver drawstrings and cuffs, silver over-ear headphones with pale-cyan accents, silver hip pouch, light-grey cargo joggers, charcoal fingerless gloves, charcoal-and-white high-top sneakers" },
+      "meshy": {
+        "mesh": "01a155bc-0b66-737a-b59b-a15b353760be",
+        "rig": "01a155be-7a9e-7385-b60e-351940abd417",
+        "library_clips": "01a155bf-d4b8-728a-ac5b-22d173322803",
+        "retargets": { "type": "01a155bf-d63e-7317-846b-ebbb6936b5a7", "read": "01a155bf-d93e-710a-8b2c-e74ad8d1547b", "operate": "01a155bf-dbea-7360-8c09-4db834420019", "think": "01a155bf-de86-7660-ad15-fef5c392fe04" },
+        "credits": 59
+      }
+    },
+    {
       "id": "character.generic",
       "dist": "dist/characters/generic.glb",
       "bytes": 588200,
@@ -63,7 +77,7 @@
       }
     }
   ],
-  "meshy_credits_total": 220,
-  "higgsfield_images": 6,
+  "meshy_credits_total": 279,
+  "higgsfield_images": 10,
   "license_review": "pending (S7): confirm Higgsfield and Meshy output terms for redistribution"
 }
